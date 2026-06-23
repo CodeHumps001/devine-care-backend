@@ -1,0 +1,367 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  DEPT_HEAD
+  STAFF
+}
+
+enum Position {
+  DOCTOR
+  NURSE
+  MIDWIFE
+  PHARMACIST
+  LAB_TECHNICIAN
+  RECEPTIONIST
+  ADMINISTRATOR
+  OTHER
+}
+
+enum SwapStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  MATERNITY
+  PATERNITY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+}
+
+// ─── IDENTITY ────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  role         Role      @default(STAFF)
+  position     Position?
+  departmentId String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  department        Department?          @relation(fields: [departmentId], references: [id])
+  profile           StaffProfile?
+  shifts            Shift[]
+  attendanceRecords AttendanceRecord[]
+  leaveApplications LeaveApplication[]   @relation("LeaveApplicant")
+  reviewedLeaves    LeaveApplication[]   @relation("LeaveReviewer")
+  leaveBalances     LeaveBalance[]
+  swapRequestsMade     ShiftSwapRequest[] @relation("SwapRequester")
+  swapRequestsReceived ShiftSwapRequest[] @relation("SwapTarget")
+  sentMessages      Message[]            @relation("SentMessages")
+  conversations     ConversationMember[]
+  readReceipts      MessageReadReceipt[]
+  announcements     Announcement[]
+  appointments      Appointment[]
+  posts             Post[]
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  shiftTypes    ShiftType[]
+  users         User[]
+  shifts        Shift[]
+  announcements Announcement[]
+  conversations Conversation[]
+}
+
+model ShiftType {
+  id           String @id @default(uuid())
+  name         String
+  departmentId String
+
+  department Department @relation(fields: [departmentId], references: [id])
+  shifts     Shift[]
+}
+
+model StaffProfile {
+  id       String  @id @default(uuid())
+  userId   String  @unique
+  phone    String?
+  photoUrl String?
+  bio      String?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model HospitalSettings {
+  id             String  @id @default(uuid())
+  singleton      Boolean @default(true) @unique
+  name           String
+  latitude       Float
+  longitude      Float
+  geofenceRadius Int     @default(100)
+  address        String?
+  phone          String?
+  email          String?
+  logoUrl        String?
+}
+
+// ─── SCHEDULING ──────────────────────────────────────────
+
+model Shift {
+  id           String   @id @default(uuid())
+  userId       String
+  departmentId String
+  shiftTypeId  String
+  date         DateTime
+  createdAt    DateTime @default(now())
+
+  user         User              @relation(fields: [userId], references: [id])
+  department   Department        @relation(fields: [departmentId], references: [id])
+  shiftType    ShiftType         @relation(fields: [shiftTypeId], references: [id])
+  attendance   AttendanceRecord?
+  swapRequests ShiftSwapRequest[] @relation("OriginalShift")
+  swapTargets  ShiftSwapRequest[] @relation("TargetShift")
+}
+
+model ShiftSwapRequest {
+  id              String     @id @default(uuid())
+  requesterId     String
+  targetStaffId   String
+  originalShiftId String
+  targetShiftId   String
+  status          SwapStatus @default(PENDING)
+  createdAt       DateTime   @default(now())
+
+  requester     User  @relation("SwapRequester",  fields: [requesterId],     references: [id])
+  targetStaff   User  @relation("SwapTarget",     fields: [targetStaffId],   references: [id])
+  originalShift Shift @relation("OriginalShift",  fields: [originalShiftId], references: [id])
+  targetShift   Shift @relation("TargetShift",    fields: [targetShiftId],   references: [id])
+}
+
+// ─── ATTENDANCE ───────────────────────────────────────────
+
+model AttendanceRecord {
+  id               String           @id @default(uuid())
+  userId           String
+  shiftId          String           @unique
+  clockIn          DateTime?
+  clockOut         DateTime?
+  clockInLatitude  Float?
+  clockInLongitude Float?
+  status           AttendanceStatus @default(ABSENT)
+  createdAt        DateTime         @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  shift Shift @relation(fields: [shiftId], references: [id])
+}
+
+// ─── LEAVE ────────────────────────────────────────────────
+
+model LeaveApplication {
+  id          String      @id @default(uuid())
+  userId      String
+  leaveType   LeaveType
+  startDate   DateTime
+  endDate     DateTime
+  reason      String
+  status      LeaveStatus @default(PENDING)
+  reviewedBy  String?
+  reviewNote  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user     User  @relation("LeaveApplicant", fields: [userId],     references: [id])
+  reviewer User? @relation("LeaveReviewer",  fields: [reviewedBy], references: [id])
+}
+
+model LeaveBalance {
+  id        String    @id @default(uuid())
+  userId    String
+  leaveType LeaveType
+  year      Int
+  totalDays Int
+  usedDays  Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, leaveType, year])
+}
+
+// ─── COMMUNICATION ───────────────────────────────────────
+
+model Conversation {
+  id           String           @id @default(uuid())
+  type         ConversationType
+  departmentId String?
+  createdAt    DateTime         @default(now())
+
+  department Department?          @relation(fields: [departmentId], references: [id])
+  members    ConversationMember[]
+  messages   Message[]
+}
+
+model ConversationMember {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  user         User         @relation(fields: [userId],         references: [id])
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id])
+  sender       User                @relation("SentMessages", fields: [senderId], references: [id])
+  readReceipts MessageReadReceipt[]
+}
+
+model MessageReadReceipt {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id])
+  user    User    @relation(fields: [userId],    references: [id])
+
+  @@unique([messageId, userId])
+}
+
+model Announcement {
+  id           String   @id @default(uuid())
+  title        String
+  content      String
+  departmentId String?
+  authorId     String
+  createdAt    DateTime @default(now())
+
+  department Department? @relation(fields: [departmentId], references: [id])
+  author     User        @relation(fields: [authorId],     references: [id])
+}
+
+// ─── PUBLIC ───────────────────────────────────────────────
+
+model Appointment {
+  id           String            @id @default(uuid())
+  doctorId     String
+  patientName  String
+  patientEmail String
+  patientPhone String
+  reason       String
+  date         DateTime
+  status       AppointmentStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+
+  doctor User @relation(fields: [doctorId], references: [id])
+}
+
+model Review {
+  id        String       @id @default(uuid())
+  name      String
+  email     String
+  rating    Int
+  comment   String
+  status    ReviewStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+}
+
+model JobListing {
+  id          String   @id @default(uuid())
+  title       String
+  department  String
+  type        JobType
+  description String
+  isOpen      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  applications JobApplication[]
+}
+
+model JobApplication {
+  id           String            @id @default(uuid())
+  jobListingId String
+  name         String
+  email        String
+  phone        String
+  coverLetter  String?
+  cvUrl        String
+  status       ApplicationStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+
+  jobListing JobListing @relation(fields: [jobListingId], references: [id])
+}
+
+model Post {
+  id         String   @id @default(uuid())
+  title      String
+  content    String
+  coverImage String?
+  authorId   String
+  published  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  author User @relation(fields: [authorId], references: [id])
+}
