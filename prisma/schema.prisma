@@ -88,6 +88,8 @@ enum JobType {
 
 model User {
   id           String    @id @default(uuid())
+  firstName    String
+  lastName     String
   email        String    @unique
   password     String
   role         Role      @default(STAFF)
@@ -97,21 +99,21 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  department        Department?          @relation(fields: [departmentId], references: [id])
-  profile           StaffProfile?
-  shifts            Shift[]
-  attendanceRecords AttendanceRecord[]
-  leaveApplications LeaveApplication[]   @relation("LeaveApplicant")
-  reviewedLeaves    LeaveApplication[]   @relation("LeaveReviewer")
-  leaveBalances     LeaveBalance[]
-  swapRequestsMade     ShiftSwapRequest[] @relation("SwapRequester")
-  swapRequestsReceived ShiftSwapRequest[] @relation("SwapTarget")
-  sentMessages      Message[]            @relation("SentMessages")
-  conversations     ConversationMember[]
-  readReceipts      MessageReadReceipt[]
-  announcements     Announcement[]
-  appointments      Appointment[]
-  posts             Post[]
+  department           Department?          @relation(fields: [departmentId], references: [id])
+  profile              StaffProfile?
+  shifts               Shift[]
+  attendanceRecords    AttendanceRecord[]
+  leaveApplications    LeaveApplication[]   @relation("LeaveApplicant")
+  reviewedLeaves       LeaveApplication[]   @relation("LeaveReviewer")
+  leaveBalances        LeaveBalance[]
+  swapRequestsMade     ShiftSwapRequest[]   @relation("SwapRequester")
+  swapRequestsReceived ShiftSwapRequest[]   @relation("SwapTarget")
+  sentMessages         Message[]            @relation("SentMessages")
+  conversations        ConversationMember[]
+  readReceipts         MessageReadReceipt[]
+  announcements        Announcement[]
+  appointments         Appointment[]
+  posts                Post[]
 }
 
 model Department {
@@ -129,6 +131,8 @@ model Department {
 model ShiftType {
   id           String @id @default(uuid())
   name         String
+  startTime    String
+  endTime      String
   departmentId String
 
   department Department @relation(fields: [departmentId], references: [id])
@@ -168,9 +172,9 @@ model Shift {
   date         DateTime
   createdAt    DateTime @default(now())
 
-  user         User              @relation(fields: [userId], references: [id])
-  department   Department        @relation(fields: [departmentId], references: [id])
-  shiftType    ShiftType         @relation(fields: [shiftTypeId], references: [id])
+  user         User               @relation(fields: [userId],       references: [id])
+  department   Department         @relation(fields: [departmentId], references: [id])
+  shiftType    ShiftType          @relation(fields: [shiftTypeId],  references: [id])
   attendance   AttendanceRecord?
   swapRequests ShiftSwapRequest[] @relation("OriginalShift")
   swapTargets  ShiftSwapRequest[] @relation("TargetShift")
@@ -185,10 +189,10 @@ model ShiftSwapRequest {
   status          SwapStatus @default(PENDING)
   createdAt       DateTime   @default(now())
 
-  requester     User  @relation("SwapRequester",  fields: [requesterId],     references: [id])
-  targetStaff   User  @relation("SwapTarget",     fields: [targetStaffId],   references: [id])
-  originalShift Shift @relation("OriginalShift",  fields: [originalShiftId], references: [id])
-  targetShift   Shift @relation("TargetShift",    fields: [targetShiftId],   references: [id])
+  requester     User  @relation("SwapRequester", fields: [requesterId],     references: [id])
+  targetStaff   User  @relation("SwapTarget",    fields: [targetStaffId],   references: [id])
+  originalShift Shift @relation("OriginalShift", fields: [originalShiftId], references: [id])
+  targetShift   Shift @relation("TargetShift",   fields: [targetShiftId],   references: [id])
 }
 
 // ─── ATTENDANCE ───────────────────────────────────────────
@@ -204,24 +208,24 @@ model AttendanceRecord {
   status           AttendanceStatus @default(ABSENT)
   createdAt        DateTime         @default(now())
 
-  user  User  @relation(fields: [userId], references: [id])
+  user  User  @relation(fields: [userId],  references: [id])
   shift Shift @relation(fields: [shiftId], references: [id])
 }
 
 // ─── LEAVE ────────────────────────────────────────────────
 
 model LeaveApplication {
-  id          String      @id @default(uuid())
-  userId      String
-  leaveType   LeaveType
-  startDate   DateTime
-  endDate     DateTime
-  reason      String
-  status      LeaveStatus @default(PENDING)
-  reviewedBy  String?
-  reviewNote  String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String      @id @default(uuid())
+  userId     String
+  leaveType  LeaveType
+  startDate  DateTime
+  endDate    DateTime
+  reason     String
+  status     LeaveStatus @default(PENDING)
+  reviewedBy String?
+  reviewNote String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   user     User  @relation("LeaveApplicant", fields: [userId],     references: [id])
   reviewer User? @relation("LeaveReviewer",  fields: [reviewedBy], references: [id])

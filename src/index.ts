@@ -3,6 +3,9 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 
+//ROUTES IMPORTS
+import { router as authRouter } from "./modules/auth/auth.routes";
+
 dotenv.config();
 
 const app = express();
@@ -11,7 +14,10 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (req, res) => {
+//ROUTES
+app.use("/api/v1/auth", authRouter);
+
+app.get("api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });
 });
 
