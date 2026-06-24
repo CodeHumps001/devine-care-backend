@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 //ROUTES IMPORTS
 import { router as authRouter } from "./modules/auth/auth.routes";
 import { router as departmentRouter } from "./modules/departments/departments.routes";
+import { errorHandler } from "./middlewares/error.middleware";
 
 dotenv.config();
 
@@ -19,9 +20,12 @@ app.use(express.json());
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/departments", departmentRouter);
 
+app.use(errorHandler);
 app.get("/api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });
 });
+
+//
 
 const PORT = process.env.PORT || 5000;
 

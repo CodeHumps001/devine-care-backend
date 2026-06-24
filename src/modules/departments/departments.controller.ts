@@ -21,37 +21,53 @@ const createDepartments = async (req: Request, res: Response) => {
   }
 };
 
-const viewDepartments = async (req: Request, res: Response) => {
+const viewDepartments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const view = await viewDep();
     res.status(200).json({ status: "success", data: view });
   } catch (err: any) {
-    res.status(404).json({ status: "failed", message: err.message });
+    next(err);
   }
 };
 
-const viewSingleDepartments = async (req: Request, res: Response) => {
+const viewSingleDepartments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const id = req.params.id as string;
     const data = await viewUniqueDep(id);
     res.status(200).json({ status: "success", data: data });
   } catch (err: any) {
-    res.status(404).json({ status: "failed", message: err.message });
+    next(err);
   }
 };
 
-const updateDepartments = async (req: Request, res: Response) => {
+const updateDepartments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const id = req.params.id as string;
     const { name } = req.body;
     const data = await updateDep(id, name);
     res.status(200).json({ status: "success", data: data });
   } catch (err: any) {
-    res.status(404).json({ status: "failed", message: err.message });
+    next(err);
   }
 };
 
-const deleteDepartments = async (req: Request, res: Response) => {
+const deleteDepartments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const id = req.params.id as string;
     await deleteDep(id);
@@ -59,7 +75,7 @@ const deleteDepartments = async (req: Request, res: Response) => {
       .status(200)
       .json({ status: "success", message: "department deleted successfully" });
   } catch (err: any) {
-    res.status(404).json({ status: "failed", message: err.message });
+    next(err);
   }
 };
 

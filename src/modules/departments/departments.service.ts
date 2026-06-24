@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma";
+import { AppError } from "../../middlewares/error.middleware";
 
 export const createDep = async (name: string) => {
   const department = await prisma.department.findUnique({
@@ -6,7 +7,7 @@ export const createDep = async (name: string) => {
   });
 
   if (department) {
-    throw new Error("Department already saved");
+    throw new AppError("Department already exists", 400);
   }
   const newDep = await prisma.department.create({
     data: { name },
@@ -36,7 +37,7 @@ export const viewUniqueDep = async (id: string) => {
   });
 
   if (!department) {
-    throw new Error("Department not found");
+    throw new AppError("Department not found", 404);
   }
 
   return department;
@@ -47,7 +48,7 @@ export const updateDep = async (id: string, newName: string) => {
   });
 
   if (!department) {
-    throw new Error("Department not found");
+    throw new AppError("Department not found", 404);
   }
   const renameDep = await prisma.department.update({
     where: { id },
@@ -64,7 +65,7 @@ export const deleteDep = async (id: string) => {
   });
 
   if (!department) {
-    throw new Error("Department not found");
+    throw new AppError("Department not found", 404);
   }
 
   const delDep = await prisma.department.delete({
