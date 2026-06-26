@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 import { router as authRouter } from "./modules/auth/auth.routes";
 import { router as departmentRouter } from "./modules/departments/departments.routes";
 import { router as userRoutes } from "./modules/users/users.routes";
+import { router as shiftTypeRoutes } from "./modules/shifts/shift-types.routes";
+import { router as shiftRoutes } from "./modules/shifts/shifts.routes";
 import { errorHandler } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -21,7 +23,8 @@ app.use(express.json());
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/departments", departmentRouter);
 app.use("/api/v1/users", userRoutes);
-
+app.use("/api/v1/shift-types", shiftTypeRoutes);
+app.use("/api/v1/shifts", shiftRoutes);
 app.get("/api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });
 });
