@@ -12,11 +12,12 @@ const register = async (req: Request, res: Response) => {
       position,
       departmentId,
     } = req.body;
+    const nomarlizeEmail = email.toLowerCase();
 
     await registerUser(
       firstName,
       lastName,
-      email,
+      nomarlizeEmail,
       password,
       role,
       position,
@@ -34,8 +35,9 @@ const register = async (req: Request, res: Response) => {
 const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+    const nomarlizeEmail = email.toLowerCase();
 
-    const data = await loginUser(email, password);
+    const data = await loginUser(nomarlizeEmail, password);
     res.status(200).json({ status: "success", data });
   } catch (err: any) {
     res.status(400).json({ status: "failed", message: err.message });
