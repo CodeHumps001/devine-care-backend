@@ -120,7 +120,7 @@ model Department {
   id        String   @id @default(uuid())
   name      String   @unique
   createdAt DateTime @default(now())
-
+  minStaffPerShift Int      @default(1)
   shiftTypes    ShiftType[]
   users         User[]
   shifts        Shift[]
@@ -134,6 +134,7 @@ model ShiftType {
   startTime    String
   endTime      String
   departmentId String
+  isDayOff     Boolean @default(false)
 
   department Department @relation(fields: [departmentId], references: [id])
   shifts     Shift[]

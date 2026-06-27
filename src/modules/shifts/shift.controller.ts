@@ -20,14 +20,20 @@ const createShiftType = async (
   next: NextFunction,
 ) => {
   try {
-    const { name, startTime, endTime, departmentId } = req.body;
+    const { name, startTime, endTime, departmentId, isDayOff } = req.body;
     if (!name || !startTime || !endTime || !departmentId) {
       throw new AppError(
         "name , startTime , endTime and Department are all required",
         400,
       );
     }
-    const data = await postShiftType(name, startTime, endTime, departmentId);
+    const data = await postShiftType(
+      name,
+      startTime,
+      endTime,
+      departmentId,
+      isDayOff,
+    );
     res.status(201).json({
       status: "success",
       data,

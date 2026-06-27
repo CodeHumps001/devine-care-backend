@@ -1,12 +1,14 @@
 import { SwapStatus } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
+import { allowedNodeEnvironmentFlags } from "node:process";
 
 const postShiftType = async (
   name: string,
   startTime: string,
   endTime: string,
   departmentId: string,
+  isDayOff: boolean = false,
 ) => {
   const dep = await prisma.department.findUnique({
     where: { id: departmentId },
@@ -29,6 +31,7 @@ const postShiftType = async (
       startTime,
       endTime,
       departmentId,
+      isDayOff,
     },
   });
 
@@ -118,19 +121,45 @@ const generateShift = async (
 
   if (mode === "auto") {
     const staff = department.users;
-    const shiftTypes = department.shiftTypes;
+    const workingShifts = department.shiftTypes.filter((s) => !s.isDayOff);
+    const dayOffShift = department.shiftTypes.find((s) => s.isDayOff);
+    const minStaff = department.minStaffPerShift;
+    const totalStaff = staff.length;
+
+    if (!dayOffShift) {
+      throw new AppError(
+        "No Day Off shift type found for this department. Please create one first.",
+        400,
+      );
+    }
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
+      const rotationInterval = 2; // rotate every 2 days
+      const rotationCycle = Math.floor((day - 1) / rotationInterval);
 
-      staff.forEach((member, index) => {
-        // rotate shift types across staff members
-        const shiftType = shiftTypes[index % shiftTypes.length];
+      // build the slot list for this day
+      // e.g. for Records with minStaff=1 and 2 working shifts:
+      // slots = [Day, Night, DayOff]
+      const slots: string[] = [];
 
+      workingShifts.forEach((shiftType) => {
+        for (let i = 0; i < minStaff; i++) {
+          slots.push(shiftType.id);
+        }
+      });
+
+      // fill remaining staff with day off
+      while (slots.length < totalStaff) {
+        slots.push(dayOffShift.id);
+      }
+
+      staff.forEach((member, staffIndex) => {
+        const slotIndex = (staffIndex + rotationCycle) % totalStaff;
         shiftsToCreate.push({
           userId: member.id,
           departmentId,
-          shiftTypeId: shiftType.id,
+          shiftTypeId: slots[slotIndex],
           date,
         });
       });
@@ -154,8 +183,8 @@ const generateShift = async (
     }
   }
 
-  // delete existing shifts for this department and month to avoid duplicates
-  await prisma.shift.deleteMany({
+  // delete existing swap requests linked to this department's shifts first
+  const existingShifts = await prisma.shift.findMany({
     where: {
       departmentId,
       date: {
@@ -163,7 +192,30 @@ const generateShift = async (
         lte: new Date(year, month - 1, daysInMonth),
       },
     },
+    select: { id: true },
   });
+
+  const shiftIds = existingShifts.map((s) => s.id);
+
+  await prisma.$transaction([
+    prisma.shiftSwapRequest.deleteMany({
+      where: {
+        OR: [
+          { originalShiftId: { in: shiftIds } },
+          { targetShiftId: { in: shiftIds } },
+        ],
+      },
+    }),
+    prisma.shift.deleteMany({
+      where: {
+        departmentId,
+        date: {
+          gte: new Date(year, month - 1, 1),
+          lte: new Date(year, month - 1, daysInMonth),
+        },
+      },
+    }),
+  ]);
 
   await prisma.shift.createMany({
     data: shiftsToCreate,
