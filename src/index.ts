@@ -10,6 +10,7 @@ import { router as userRoutes } from "./modules/users/users.routes";
 import { router as shiftTypeRoutes } from "./modules/shifts/shift-types.routes";
 import { router as shiftRoutes } from "./modules/shifts/shifts.routes";
 import { router as attendanceRoutes } from "./modules/attendance/attendance.routes";
+import { router as leaveRoutes } from "./modules/leave/leave.routes";
 import { errorHandler } from "./middlewares/error.middleware";
 import { scheduleAttendanceJobs } from "./modules/jobs/attendance.jobs";
 
@@ -28,6 +29,7 @@ app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/shift-types", shiftTypeRoutes);
 app.use("/api/v1/shifts", shiftRoutes);
 app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/leave", leaveRoutes);
 app.get("/api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });
 });
