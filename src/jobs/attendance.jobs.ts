@@ -1,7 +1,7 @@
 // ─── PROCESSOR ───────────────────────────────────────────
 
-import prisma from "../../config/prisma";
-import { attendanceQueue } from "../../config/queue";
+import prisma from "../config/prisma";
+import { attendanceQueue } from "../config/queue";
 
 // this function runs every time a job is picked from the queue
 attendanceQueue.process(async (job) => {

@@ -1,17 +1,24 @@
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
 
+import { createGroupConversation } from "../chat/chat.service";
+
 export const createDep = async (name: string) => {
   const department = await prisma.department.findUnique({
     where: { name },
   });
 
   if (department) {
-    throw new AppError("Department already exists", 400);
+    throw new AppError("Department already saved", 400);
   }
+
   const newDep = await prisma.department.create({
     data: { name },
   });
+
+  // automatically create a group conversation for this department
+  await createGroupConversation(newDep.id);
+
   return newDep;
 };
 
