@@ -73,7 +73,7 @@ export const registerUser = async (
   return user;
 };
 
-// ─── LOGIN ───────────────────────────────────────────────
+// ─── LOGIN
 
 export const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({

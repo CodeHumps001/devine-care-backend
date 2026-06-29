@@ -2,6 +2,12 @@ import { SwapStatus } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
 import { allowedNodeEnvironmentFlags } from "node:process";
+import {
+  calculateDaysSinceReference,
+  DEPARTMENT_CYCLES,
+  getSlotMapForDepartment,
+  SlotKey,
+} from "../../utils/shiftAlgorithm";
 
 const postShiftType = async (
   name: string,
@@ -88,6 +94,11 @@ const generateShift = async (
   year: number,
   mode: "auto" | "manual",
   assignments?: { userId: string; shiftTypeId: string; days: number[] }[],
+  staffGroups?: {
+    morning?: string[];
+    night?: string[];
+    rotating?: string[];
+  },
 ) => {
   const department = await prisma.department.findUnique({
     where: { id: departmentId },
@@ -121,47 +132,148 @@ const generateShift = async (
 
   if (mode === "auto") {
     const staff = department.users;
-    const workingShifts = department.shiftTypes.filter((s) => !s.isDayOff);
-    const dayOffShift = department.shiftTypes.find((s) => s.isDayOff);
-    const minStaff = department.minStaffPerShift;
-    const totalStaff = staff.length;
-
-    if (!dayOffShift) {
-      throw new AppError(
-        "No Day Off shift type found for this department. Please create one first.",
-        400,
-      );
-    }
+    const shiftTypes = department.shiftTypes;
+    const slotMap = getSlotMapForDepartment(shiftTypes);
+    const departmentCycle = DEPARTMENT_CYCLES[department.name.toLowerCase()];
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
-      const rotationInterval = 2; // rotate every 2 days
-      const rotationCycle = Math.floor((day - 1) / rotationInterval);
-
-      // build the slot list for this day
-      // e.g. for Records with minStaff=1 and 2 working shifts:
-      // slots = [Day, Night, DayOff]
-      const slots: string[] = [];
-
-      workingShifts.forEach((shiftType) => {
-        for (let i = 0; i < minStaff; i++) {
-          slots.push(shiftType.id);
-        }
-      });
-
-      // fill remaining staff with day off
-      while (slots.length < totalStaff) {
-        slots.push(dayOffShift.id);
-      }
 
       staff.forEach((member, staffIndex) => {
-        const slotIndex = (staffIndex + rotationCycle) % totalStaff;
-        shiftsToCreate.push({
-          userId: member.id,
-          departmentId,
-          shiftTypeId: slots[slotIndex],
-          date,
-        });
+        let shiftTypeId: string | undefined;
+
+        if (departmentCycle) {
+          // departments with a defined shared cycle e.g. Records
+          const { cycle, cycleLength, referenceDate } = departmentCycle;
+          const dayIndex = calculateDaysSinceReference(
+            referenceDate,
+            year,
+            month,
+            day,
+          );
+          const cyclePosition = (member.cycleOffset + dayIndex) % cycleLength;
+          const slot = cycle[cyclePosition] as SlotKey;
+          shiftTypeId = slotMap[slot];
+        } else if (staffGroups) {
+          // departments with staff groups e.g. Pharmacy
+          const isMorning = staffGroups.morning?.includes(member.id);
+          const isNight = staffGroups.night?.includes(member.id);
+          const isRotating = staffGroups.rotating?.includes(member.id);
+
+          const rotatingStaff = staff.filter((s) =>
+            staffGroups.rotating?.includes(s.id),
+          );
+          const rotatingIndex = rotatingStaff.findIndex(
+            (s) => s.id === member.id,
+          );
+
+          if (isMorning) {
+            // 5 Morning, 2 Off cycle
+            const morningCycle: SlotKey[] = ["M", "M", "M", "M", "M", "O", "O"];
+            const morningStaff = staff.filter((s) =>
+              staffGroups.morning?.includes(s.id),
+            );
+            const morningIndex = morningStaff.findIndex(
+              (s) => s.id === member.id,
+            );
+            const dayIndex = calculateDaysSinceReference(
+              "2026-06-01",
+              year,
+              month,
+              day,
+            );
+            const offset = Math.round((morningIndex * 7) / morningStaff.length);
+            const cyclePosition = (offset + dayIndex) % 7;
+            shiftTypeId = slotMap[morningCycle[cyclePosition]];
+          } else if (isNight) {
+            // 4 Night, 4 Off cycle
+            const nightCycle: SlotKey[] = [
+              "N",
+              "N",
+              "N",
+              "N",
+              "O",
+              "O",
+              "O",
+              "O",
+            ];
+            const nightStaff = staff.filter((s) =>
+              staffGroups.night?.includes(s.id),
+            );
+            const nightIndex = nightStaff.findIndex((s) => s.id === member.id);
+            const dayIndex = calculateDaysSinceReference(
+              "2026-06-01",
+              year,
+              month,
+              day,
+            );
+            const offset = Math.round((nightIndex * 8) / nightStaff.length);
+            const cyclePosition = (offset + dayIndex) % 8;
+            shiftTypeId = slotMap[nightCycle[cyclePosition]];
+          } else if (isRotating) {
+            // rotating staff go through M, A, N, O fairly
+            // build rotation slots based on available shift types
+            const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
+            const offShift = shiftTypes.find((s) => s.isDayOff);
+            const totalRotating = rotatingStaff.length;
+
+            // each rotating staff member gets a fair offset
+            const rotatingCycleLength = workingShifts.length * 2 + 2; // e.g. M,M,A,A,N,N,O,O
+            const slots: SlotKey[] = [];
+
+            workingShifts.forEach((st) => {
+              const key = st.name.toLowerCase().includes("morning")
+                ? "M"
+                : st.name.toLowerCase().includes("afternoon")
+                  ? "A"
+                  : st.name.toLowerCase().includes("night")
+                    ? "N"
+                    : "F";
+              slots.push(key, key); // 2 days each
+            });
+            slots.push("O", "O"); // 2 off days
+
+            const dayIndex = calculateDaysSinceReference(
+              "2026-06-01",
+              year,
+              month,
+              day,
+            );
+            const spacing = Math.round(slots.length / totalRotating);
+            const offset = (rotatingIndex * spacing) % slots.length;
+            const cyclePosition = (offset + dayIndex) % slots.length;
+            shiftTypeId = slotMap[slots[cyclePosition]];
+          }
+        } else {
+          // generic fallback for departments with no configuration
+          const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
+          const offShift = shiftTypes.find((s) => s.isDayOff);
+          const totalStaff = staff.length;
+          const slots: string[] = [];
+
+          workingShifts.forEach((shiftType) => {
+            for (let i = 0; i < department.minStaffPerShift; i++) {
+              slots.push(shiftType.id);
+            }
+          });
+
+          while (slots.length < totalStaff) {
+            if (offShift) slots.push(offShift.id);
+          }
+
+          const rotationCycle = Math.floor((day - 1) / 2);
+          const slotIndex = (staffIndex + rotationCycle) % totalStaff;
+          shiftTypeId = slots[slotIndex];
+        }
+
+        if (shiftTypeId) {
+          shiftsToCreate.push({
+            userId: member.id,
+            departmentId,
+            shiftTypeId,
+            date,
+          });
+        }
       });
     }
   } else {

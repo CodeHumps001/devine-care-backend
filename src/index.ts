@@ -13,6 +13,8 @@ import { router as shiftRoutes } from "./modules/shifts/shifts.routes";
 import { router as attendanceRoutes } from "./modules/attendance/attendance.routes";
 import { router as leaveRoutes } from "./modules/leave/leave.routes";
 import { router as chatRoutes } from "./modules/chat/chat.routes";
+import { router as announcementRoutes } from "./modules/announcements/announcements.routes";
+import { router as postRoutes } from "./modules/posts/posts.routes";
 import { errorHandler } from "./middlewares/error.middleware";
 import { scheduleAttendanceJobs } from "./jobs/attendance.jobs";
 import { initializeChatGateway } from "./modules/chat/chat.gateway";
@@ -45,6 +47,8 @@ app.use("/api/v1/shifts", shiftRoutes);
 app.use("/api/v1/attendance", attendanceRoutes);
 app.use("/api/v1/leave", leaveRoutes);
 app.use("/api/v1/chat", chatRoutes);
+app.use("/api/v1/announcements", announcementRoutes);
+app.use("/api/v1/posts", postRoutes);
 
 app.get("/api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });

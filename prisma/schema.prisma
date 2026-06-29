@@ -98,6 +98,9 @@ model User {
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  personalCycle  String?  // JSON array e.g. ["M","M","M","M","M","O","O"]
+  cycleOffset    Int      @default(0)
+  cycleStartDate String?  // "2026-06-01" reference date for this person
 
   department           Department?          @relation(fields: [departmentId], references: [id])
   profile              StaffProfile?
@@ -121,6 +124,9 @@ model Department {
   name      String   @unique
   createdAt DateTime @default(now())
   minStaffPerShift Int      @default(1)
+  cyclePattern   String?  // JSON array for shared department cycle
+  cycleLength    Int?     // length of the cycle
+  referenceDate  String?  // "2026-06-01" reference date
   shiftTypes    ShiftType[]
   users         User[]
   shifts        Shift[]

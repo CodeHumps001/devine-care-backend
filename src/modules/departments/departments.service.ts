@@ -49,6 +49,7 @@ export const viewUniqueDep = async (id: string) => {
 
   return department;
 };
+
 export const updateDep = async (id: string, newName: string) => {
   const department = await prisma.department.findUnique({
     where: { id },
