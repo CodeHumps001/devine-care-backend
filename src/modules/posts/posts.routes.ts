@@ -24,7 +24,7 @@ router.put(
   modifyPost,
 );
 router.delete("/", authMiddleware, authorizeRoles(Role.SUPER_ADMIN), delPost);
-router.post(
+router.patch(
   "/:id/publish",
   authMiddleware,
   authorizeRoles(Role.SUPER_ADMIN),
