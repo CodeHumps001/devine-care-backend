@@ -70,7 +70,7 @@ const PORT = process.env.PORT || 5000;
 // use httpServer instead of app to listen
 httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  await scheduleAttendanceJobs();
+  // await scheduleAttendanceJobs();
 });
 
 export default app;
