@@ -21,6 +21,8 @@ import { router as appointmentRoutes } from "./modules/appointments/appointments
 import { errorHandler } from "./middlewares/error.middleware";
 import { scheduleAttendanceJobs } from "./jobs/attendance.jobs";
 import { initializeChatGateway } from "./modules/chat/chat.gateway";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 dotenv.config();
 
@@ -41,6 +43,7 @@ initializeChatGateway(io);
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.use("/api/v1/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/departments", departmentRouter);
