@@ -3,7 +3,10 @@ import { sendEmail } from "../../config/mailer";
 import smsService from "../../config/sms";
 
 export const notificationQueue = new Bull("notifications", {
-  redis: { host: "127.0.0.1", port: 6379 },
+  redis: {
+    host: process.env.REDIS_HOST || "127.0.0.1",
+    port: Number(process.env.REDIS_PORT) || 6379,
+  },
 });
 
 notificationQueue.process(async (job) => {
