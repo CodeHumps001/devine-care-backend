@@ -21,21 +21,19 @@ const createAnnouncement = async (
 const getAnnouncements = async () => {
   const data = await prisma.announcement.findMany({
     select: {
+      id: true,
       title: true,
       content: true,
-      authorId: true,
       departmentId: true,
-      include: {
-        author: {
-          select: { firstName: true, lastName: true },
+      createdAt: true,
+      author: {
+        select: {
+          firstName: true,
+          lastName: true,
         },
       },
     },
   });
-  if (!data) {
-    throw new AppError("There is no announcenment yet", 404);
-  }
-
   return data;
 };
 const updateAnnouncement = async (
@@ -62,20 +60,24 @@ const getAnnouncement = async (id: string) => {
   const data = await prisma.announcement.findFirst({
     where: { id },
     select: {
+      id: true,
       title: true,
       content: true,
-      authorId: true,
       departmentId: true,
-      include: {
-        author: {
-          select: { firstName: true, lastName: true },
+      createdAt: true,
+      author: {
+        select: {
+          firstName: true,
+          lastName: true,
         },
       },
     },
   });
+
   if (!data) {
     throw new AppError("Announcement is not available", 404);
   }
+
   return data;
 };
 

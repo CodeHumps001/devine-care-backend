@@ -318,7 +318,7 @@ model Appointment {
   id           String            @id @default(uuid())
   doctorId     String
   patientName  String
-  patientEmail String
+  patientEmail String?
   patientPhone String
   reason       String
   date         DateTime
