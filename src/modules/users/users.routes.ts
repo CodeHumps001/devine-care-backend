@@ -24,7 +24,7 @@ const router = express.Router();
  *       200:
  *         description: List of all active staff
  */
-router.get("/", authMiddleware, authorizeRoles(Role.SUPER_ADMIN), getUsers);
+router.get("/", getUsers);
 
 /**
  * @swagger
