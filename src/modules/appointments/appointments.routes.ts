@@ -116,7 +116,10 @@ router.get(
 router.patch(
   "/:id/status",
   authMiddleware,
-  authorizeRoles(Role.STAFF, Role.DEPT_HEAD),
+  // FIX: SUPER_ADMIN added — previously only STAFF/DEPT_HEAD could update
+  // status, meaning an admin who wasn't also a doctor could never
+  // confirm/cancel appointments from the admin dashboard.
+  authorizeRoles(Role.SUPER_ADMIN, Role.STAFF, Role.DEPT_HEAD),
   updateAppStatus,
 );
 

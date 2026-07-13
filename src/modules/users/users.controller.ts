@@ -62,4 +62,25 @@ const deleteUser = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-export { getUser, getUsers, getUserProfile, deleteUser, deactivate };
+// users.controller.ts
+const getMyProfile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    const data = await user(req.user.id); // reuse existing user() service fn
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+export {
+  getUser,
+  getUsers,
+  getUserProfile,
+  deleteUser,
+  deactivate,
+  getMyProfile,
+};

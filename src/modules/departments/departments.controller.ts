@@ -9,8 +9,11 @@ import {
 
 const createDepartments = async (req: Request, res: Response) => {
   try {
-    const { name } = req.body;
-    const dep = await createDep(name);
+    const { name, minStaffPerShift } = req.body;
+    const dep = await createDep(
+      name,
+      minStaffPerShift !== undefined ? Number(minStaffPerShift) : undefined,
+    );
     res.status(201).json({
       status: "success",
       message: "Department created successfully",
@@ -55,8 +58,12 @@ const updateDepartments = async (
 ) => {
   try {
     const id = req.params.id as string;
-    const { name } = req.body;
-    const data = await updateDep(id, name);
+    const { name, minStaffPerShift } = req.body;
+    const data = await updateDep(
+      id,
+      name,
+      minStaffPerShift !== undefined ? Number(minStaffPerShift) : undefined,
+    );
     res.status(200).json({ status: "success", data: data });
   } catch (err: any) {
     next(err);

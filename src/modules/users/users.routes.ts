@@ -5,6 +5,7 @@ import {
   getUserProfile,
   deleteUser,
   deactivate,
+  getMyProfile,
 } from "./users.controller";
 import {
   authMiddleware,
@@ -123,5 +124,6 @@ router.delete(
   authorizeRoles(Role.SUPER_ADMIN),
   deleteUser,
 );
-
+// users.routes.ts — add a self-serve GET
+router.get("/profile", authMiddleware, getMyProfile);
 export { router };

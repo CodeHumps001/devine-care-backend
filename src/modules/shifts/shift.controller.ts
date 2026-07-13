@@ -43,6 +43,7 @@ const createShiftType = async (
     next(err);
   }
 };
+
 const getShiftTypeByDepId = async (
   req: Request,
   res: Response,
@@ -56,6 +57,7 @@ const getShiftTypeByDepId = async (
     next(err);
   }
 };
+
 const updateShiftType = async (
   req: Request,
   res: Response,
@@ -74,6 +76,7 @@ const updateShiftType = async (
     next(err);
   }
 };
+
 const deleteShiftType = async (
   req: Request,
   res: Response,
@@ -89,25 +92,47 @@ const deleteShiftType = async (
     next(err);
   }
 };
+
 const createShift = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { departmentId, month, year, mode, assignments } = req.body;
+    // 🔥 FIX: Extract staffGroups from request body
+    const { departmentId, month, year, mode, assignments, staffGroups } =
+      req.body;
+
+    console.log("📥 CreateShift - Request body:", {
+      departmentId,
+      month,
+      year,
+      mode,
+      assignments: assignments?.length || 0,
+      staffGroups: staffGroups
+        ? {
+            morning: staffGroups.morning?.length || 0,
+            night: staffGroups.night?.length || 0,
+            rotating: staffGroups.rotating?.length || 0,
+          }
+        : "undefined",
+    });
 
     if (!departmentId || !month || !year) {
-      throw new AppError("Department , month , and year is required", 400);
+      throw new AppError("Department, month, and year are required", 400);
     }
+
+    // 🔥 FIX: Pass staffGroups to generateShift
     const data = await generateShift(
       departmentId,
       month,
       year,
       mode,
       assignments,
+      staffGroups, // ← This was missing!
     );
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
   }
 };
+
 const getShiftByDepId = async (
   req: Request,
   res: Response,
@@ -121,6 +146,7 @@ const getShiftByDepId = async (
     next(err);
   }
 };
+
 const getMyShift = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -137,6 +163,7 @@ const getMyShift = async (
     next(err);
   }
 };
+
 const shiftSwapRequest = async (
   req: AuthenticatedRequest,
   res: Response,

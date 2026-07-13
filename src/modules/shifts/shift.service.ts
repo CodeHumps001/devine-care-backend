@@ -88,6 +88,8 @@ const delShiftType = async (id: string) => {
 
 // SHIFT CONTROLLER //
 // ===================== ============================================
+// shift.service.ts - Updated generateShift function
+
 const generateShift = async (
   departmentId: string,
   month: number,
@@ -120,9 +122,7 @@ const generateShift = async (
     throw new AppError("No shift types found for this department", 400);
   }
 
-  // get number of days in the month
   const daysInMonth = new Date(year, month, 0).getDate();
-
   const shiftsToCreate: {
     userId: string;
     departmentId: string;
@@ -130,20 +130,69 @@ const generateShift = async (
     date: Date;
   }[] = [];
 
+  const offShiftType = department.shiftTypes.find((s) => s.isDayOff);
+  const defaultWorkingShift = department.shiftTypes.find((s) => !s.isDayOff);
+
+  // ─── DEBUG: Log department info ────────────────────────────────────
+  console.log(`🔍 Generating shifts for: ${department.name}`);
+  console.log(`🔍 Staff count: ${department.users.length}`);
+  console.log(
+    `🔍 Shift types: ${department.shiftTypes.map((s) => s.name).join(", ")}`,
+  );
+  console.log(`🔍 staffGroups provided: ${staffGroups ? "Yes" : "No"}`);
+  // ──────────────────────────────────────────────────────────────────
+
   if (mode === "auto") {
     const staff = department.users;
     const shiftTypes = department.shiftTypes;
     const slotMap = getSlotMapForDepartment(shiftTypes);
     const departmentCycle = DEPARTMENT_CYCLES[department.name.toLowerCase()];
 
+    console.log(
+      `🔍 Department cycle: ${departmentCycle ? "Found" : "Not found"}`,
+    );
+    console.log(`🔍 SlotMap:`, slotMap);
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
 
-      staff.forEach((member, staffIndex) => {
+      staff.forEach((member) => {
         let shiftTypeId: string | undefined;
 
-        if (departmentCycle) {
-          // departments with a defined shared cycle e.g. Records
+        // ─── PRIORITY 1: Personal Cycle (Pharmacy with real calendar) ───
+        // Each staff member has their own cycle stored in the database
+        if (member.personalCycle) {
+          try {
+            const cycle = JSON.parse(member.personalCycle) as SlotKey[];
+            const referenceDate = member.cycleStartDate || "2026-06-01";
+            const dayIndex = calculateDaysSinceReference(
+              referenceDate,
+              year,
+              month,
+              day,
+            );
+            const cyclePosition =
+              (member.cycleOffset + dayIndex) % cycle.length;
+            const slot = cycle[cyclePosition];
+            shiftTypeId = slotMap[slot];
+
+            // Debug first 3 days
+            if (day <= 3) {
+              console.log(
+                `   📌 ${member.firstName} (personal): day=${day}, slot=${slot}, shiftTypeId=${shiftTypeId?.substring(0, 8)}...`,
+              );
+            }
+          } catch (error) {
+            console.error(
+              `❌ Failed to parse personalCycle for ${member.firstName}:`,
+              error,
+            );
+          }
+        }
+
+        // ─── PRIORITY 2: Department Cycle (Records, OPD, etc.) ───
+        // Department-wide shared cycle
+        else if (departmentCycle) {
           const { cycle, cycleLength, referenceDate } = departmentCycle;
           const dayIndex = calculateDaysSinceReference(
             referenceDate,
@@ -154,21 +203,30 @@ const generateShift = async (
           const cyclePosition = (member.cycleOffset + dayIndex) % cycleLength;
           const slot = cycle[cyclePosition] as SlotKey;
           shiftTypeId = slotMap[slot];
-        } else if (staffGroups) {
-          // departments with staff groups e.g. Pharmacy
+
+          // Debug first 3 days
+          if (day <= 3) {
+            console.log(
+              `   📌 ${member.firstName} (dept cycle): day=${day}, slot=${slot}, shiftTypeId=${shiftTypeId?.substring(0, 8)}...`,
+            );
+          }
+        }
+
+        // ─── PRIORITY 3: Staff Groups (Pharmacy fallback) ───
+        // Groups assigned in the UI (Morning, Night, Rotating)
+        else if (staffGroups) {
           const isMorning = staffGroups.morning?.includes(member.id);
           const isNight = staffGroups.night?.includes(member.id);
           const isRotating = staffGroups.rotating?.includes(member.id);
 
-          const rotatingStaff = staff.filter((s) =>
-            staffGroups.rotating?.includes(s.id),
-          );
-          const rotatingIndex = rotatingStaff.findIndex(
-            (s) => s.id === member.id,
-          );
+          // Log group assignment on day 1
+          if (day === 1) {
+            console.log(
+              `   📌 ${member.firstName}: Morning=${!!isMorning}, Night=${!!isNight}, Rotating=${!!isRotating}`,
+            );
+          }
 
           if (isMorning) {
-            // 5 Morning, 2 Off cycle
             const morningCycle: SlotKey[] = ["M", "M", "M", "M", "M", "O", "O"];
             const morningStaff = staff.filter((s) =>
               staffGroups.morning?.includes(s.id),
@@ -186,7 +244,6 @@ const generateShift = async (
             const cyclePosition = (offset + dayIndex) % 7;
             shiftTypeId = slotMap[morningCycle[cyclePosition]];
           } else if (isNight) {
-            // 4 Night, 4 Off cycle
             const nightCycle: SlotKey[] = [
               "N",
               "N",
@@ -211,14 +268,14 @@ const generateShift = async (
             const cyclePosition = (offset + dayIndex) % 8;
             shiftTypeId = slotMap[nightCycle[cyclePosition]];
           } else if (isRotating) {
-            // rotating staff go through M, A, N, O fairly
-            // build rotation slots based on available shift types
             const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
-            const offShift = shiftTypes.find((s) => s.isDayOff);
+            const rotatingStaff = staff.filter((s) =>
+              staffGroups.rotating?.includes(s.id),
+            );
+            const rotatingIndex = rotatingStaff.findIndex(
+              (s) => s.id === member.id,
+            );
             const totalRotating = rotatingStaff.length;
-
-            // each rotating staff member gets a fair offset
-            const rotatingCycleLength = workingShifts.length * 2 + 2; // e.g. M,M,A,A,N,N,O,O
             const slots: SlotKey[] = [];
 
             workingShifts.forEach((st) => {
@@ -229,9 +286,9 @@ const generateShift = async (
                   : st.name.toLowerCase().includes("night")
                     ? "N"
                     : "F";
-              slots.push(key, key); // 2 days each
+              slots.push(key, key);
             });
-            slots.push("O", "O"); // 2 off days
+            slots.push("O", "O");
 
             const dayIndex = calculateDaysSinceReference(
               "2026-06-01",
@@ -244,10 +301,12 @@ const generateShift = async (
             const cyclePosition = (offset + dayIndex) % slots.length;
             shiftTypeId = slotMap[slots[cyclePosition]];
           }
-        } else {
-          // generic fallback for departments with no configuration
+        }
+
+        // ─── PRIORITY 4: Generic Fallback ───
+        // For departments with no configuration
+        else {
           const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
-          const offShift = shiftTypes.find((s) => s.isDayOff);
           const totalStaff = staff.length;
           const slots: string[] = [];
 
@@ -258,12 +317,29 @@ const generateShift = async (
           });
 
           while (slots.length < totalStaff) {
-            if (offShift) slots.push(offShift.id);
+            if (offShiftType) slots.push(offShiftType.id);
           }
 
           const rotationCycle = Math.floor((day - 1) / 2);
-          const slotIndex = (staffIndex + rotationCycle) % totalStaff;
+          const slotIndex =
+            (staff.findIndex((s) => s.id === member.id) + rotationCycle) %
+            totalStaff;
           shiftTypeId = slots[slotIndex];
+        }
+
+        // ─── FALLBACK: Ensure every staff gets a shift ───
+        // If no shift type found, assign Off or default working shift
+        if (!shiftTypeId) {
+          if (day <= 3) {
+            console.log(
+              `   ⚠️ No shiftTypeId for ${member.firstName} on day ${day}, using fallback`,
+            );
+          }
+          if (offShiftType) {
+            shiftTypeId = offShiftType.id;
+          } else if (defaultWorkingShift) {
+            shiftTypeId = defaultWorkingShift.id;
+          }
         }
 
         if (shiftTypeId) {
@@ -273,6 +349,10 @@ const generateShift = async (
             shiftTypeId,
             date,
           });
+        } else {
+          console.error(
+            `❌ Still no shiftTypeId for ${member.firstName} on day ${day}`,
+          );
         }
       });
     }
@@ -295,7 +375,9 @@ const generateShift = async (
     }
   }
 
-  // delete existing swap requests linked to this department's shifts first
+  console.log(`📊 Total shifts to create: ${shiftsToCreate.length}`);
+
+  // Delete existing swap requests linked to this department's shifts first
   const existingShifts = await prisma.shift.findMany({
     where: {
       departmentId,

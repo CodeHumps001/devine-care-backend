@@ -45,7 +45,7 @@ export const PERSONAL_CYCLES: Record<
     offset: number;
   }
 > = {
-  // pharmacy staff
+  // Pharmacy staff - from real calendar
   rich: {
     cycle: ["M", "M", "M", "M", "M", "O", "O"],
     cycleLength: 7,
@@ -58,7 +58,24 @@ export const PERSONAL_CYCLES: Record<
     referenceDate: "2026-06-01",
     offset: 0,
   },
-  // add emelia, vic, franc once their cycles are confirmed
+  emelia: {
+    cycle: ["O", "O", "M", "M", "A", "A", "N", "N"],
+    cycleLength: 8,
+    referenceDate: "2026-06-01",
+    offset: 0,
+  },
+  vic: {
+    cycle: ["A", "N", "A", "N", "A", "O", "O", "M"],
+    cycleLength: 8,
+    referenceDate: "2026-06-01",
+    offset: 0,
+  },
+  franc: {
+    cycle: ["O", "A", "O", "A", "O", "A", "O", "N"],
+    cycleLength: 8,
+    referenceDate: "2026-06-01",
+    offset: 0,
+  },
 };
 
 export const getSlotMapForDepartment = (
@@ -72,18 +89,32 @@ export const getSlotMapForDepartment = (
 
   shiftTypes.forEach((st) => {
     const name = st.name.toLowerCase();
-    if (st.isDayOff) {
+
+    // 🔥 CRITICAL: Map "O" for Off shifts
+    // Check isDayOff flag OR name contains "off"
+    if (st.isDayOff || name.includes("off") || name === "off") {
       slotMap["O"] = st.id;
-    } else if (name.includes("full")) {
+    }
+    // Map "F" for Full Day
+    else if (name.includes("full") || name.includes("day")) {
       slotMap["F"] = st.id;
-    } else if (name.includes("night")) {
+    }
+    // Map "N" for Night
+    else if (name.includes("night")) {
       slotMap["N"] = st.id;
-    } else if (name.includes("morning")) {
+    }
+    // Map "M" for Morning
+    else if (name.includes("morning")) {
       slotMap["M"] = st.id;
-    } else if (name.includes("afternoon")) {
+    }
+    // Map "A" for Afternoon
+    else if (name.includes("afternoon")) {
       slotMap["A"] = st.id;
     }
   });
+
+  // 🔥 Debug: Log what was mapped
+  console.log("🔍 SlotMap:", slotMap);
 
   return slotMap;
 };

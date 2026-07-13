@@ -1,5 +1,10 @@
 import express from "express";
 import { login, register } from "./auth.controller";
+import {
+  authMiddleware,
+  authorizeRoles,
+} from "../../middlewares/auth.middleware";
+import { Role } from "@prisma/client";
 
 const router = express.Router();
 
@@ -7,9 +12,8 @@ const router = express.Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register a new staff member
+ *     summary: Admin-only — create a new staff account (emails login credentials to the staff member)
  *     tags: [Auth]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -29,7 +33,8 @@ const router = express.Router();
  *                 example: yaw@lifecare.com
  *               password:
  *                 type: string
- *                 example: password123
+ *                 description: Temporary password — emailed to the new staff member
+ *                 example: TempPass123
  *               role:
  *                 type: string
  *                 enum: [SUPER_ADMIN, DEPT_HEAD, STAFF]
@@ -43,9 +48,13 @@ const router = express.Router();
  *                 example: 75cbba2c-4595-44ed-a80e-bac8f4e3b7d3
  *     responses:
  *       201:
- *         description: Account created successfully
+ *         description: Account created and welcome email sent
  *       400:
  *         description: User already exists or validation error
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized — SUPER_ADMIN only
  */
 router.post("/register", register);
 
@@ -75,6 +84,8 @@ router.post("/register", register);
  *         description: Login successful, returns JWT token and user info
  *       400:
  *         description: Invalid email or password
+ *       401:
+ *         description: Account deactivated
  */
 router.post("/login", login);
 

@@ -1,5 +1,10 @@
 import express from "express";
-import { submitReview, viewReview, updateReview } from "./reviews.controller";
+import {
+  submitReview,
+  viewReview,
+  viewAllReviews,
+  updateReview,
+} from "./reviews.controller";
 import {
   authMiddleware,
   authorizeRoles,
@@ -55,6 +60,23 @@ router.post("/", submitReview);
  *         description: List of approved reviews
  */
 router.get("/", viewReview);
+
+/**
+ * @swagger
+ * /reviews/all:
+ *   get:
+ *     summary: Get all reviews regardless of status (admin moderation queue)
+ *     tags: [Reviews]
+ *     responses:
+ *       200:
+ *         description: List of every review (PENDING, APPROVED, REJECTED)
+ */
+router.get(
+  "/all",
+  authMiddleware,
+  authorizeRoles(Role.SUPER_ADMIN),
+  viewAllReviews,
+);
 
 /**
  * @swagger

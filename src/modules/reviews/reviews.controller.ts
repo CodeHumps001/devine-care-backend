@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { AppError } from "../../middlewares/error.middleware";
-import { postReview, getReview, updateReviewStatus } from "./reviews.service";
+import {
+  postReview,
+  getReview,
+  getAllReviews,
+  updateReviewStatus,
+} from "./reviews.service";
+import { ReviewStatus } from "@prisma/client";
 
 export const submitReview = async (
   req: Request,
@@ -38,6 +44,20 @@ export const viewReview = async (
   }
 };
 
+// admin-only — includes PENDING and REJECTED so the moderation queue works
+export const viewAllReviews = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const data = await getAllReviews();
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateReview = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -46,7 +66,12 @@ export const updateReview = async (
   try {
     const id = req.params.id as string;
     const { status } = req.body;
-    const data = await updateReviewStatus(id, status);
+
+    if (!["APPROVED", "REJECTED"].includes(status)) {
+      throw new AppError("status must be APPROVED or REJECTED", 400);
+    }
+
+    const data = await updateReviewStatus(id, status as ReviewStatus);
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);

@@ -17,9 +17,18 @@ export const postReview = async (
   });
 };
 
+// public: only approved reviews (used on the website)
 export const getReview = async () => {
   return await prisma.review.findMany({
     where: { status: "APPROVED" },
+    orderBy: { createdAt: "desc" },
+  });
+};
+
+// admin-only: every review regardless of status, so PENDING ones are
+// actually visible for moderation
+export const getAllReviews = async () => {
+  return await prisma.review.findMany({
     orderBy: { createdAt: "desc" },
   });
 };
