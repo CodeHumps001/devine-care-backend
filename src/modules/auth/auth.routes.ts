@@ -4,6 +4,9 @@ import {
   authMiddleware,
   authorizeRoles,
 } from "../../middlewares/auth.middleware";
+import {
+  changeMyPassword /* , ...your existing imports */,
+} from "./auth.controller";
 import { Role } from "@prisma/client";
 
 const router = express.Router();
@@ -88,5 +91,32 @@ router.post("/register", register);
  *         description: Account deactivated
  */
 router.post("/login", login);
+
+/**
+ * @swagger
+ * /auth/change-password:
+ *   patch:
+ *     summary: Change your own password
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 example: NewSecurePass123
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Incorrect current password or weak new password
+ */
+router.patch("/change-password", authMiddleware, changeMyPassword);
 
 export { router };

@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
- 
 }
 
 // ─── ENUMS ───────────────────────────────────────────────
@@ -88,20 +87,20 @@ enum JobType {
 // ─── IDENTITY ────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(uuid())
-  firstName    String
-  lastName     String
-  email        String    @unique
-  password     String
-  role         Role      @default(STAFF)
-  position     Position?
-  departmentId String?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  personalCycle  String?  // JSON array e.g. ["M","M","M","M","M","O","O"]
-  cycleOffset    Int      @default(0)
-  cycleStartDate String?  // "2026-06-01" reference date for this person
+  id             String    @id @default(uuid())
+  firstName      String
+  lastName       String
+  email          String    @unique
+  password       String
+  role           Role      @default(STAFF)
+  position       Position?
+  departmentId   String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  personalCycle  String? // JSON array e.g. ["M","M","M","M","M","O","O"]
+  cycleOffset    Int       @default(0)
+  cycleStartDate String? // "2026-06-01" reference date for this person
 
   department           Department?          @relation(fields: [departmentId], references: [id])
   profile              StaffProfile?
@@ -118,25 +117,26 @@ model User {
   announcements        Announcement[]
   appointments         Appointment[]
   posts                Post[]
+  Feedback             Feedback[]
 }
 
 model Department {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  minStaffPerShift Int      @default(1)
-  cyclePattern   String?  // JSON array for shared department cycle
-  cycleLength    Int?     // length of the cycle
-  referenceDate  String?  // "2026-06-01" reference date
-  shiftTypes    ShiftType[]
-  users         User[]
-  shifts        Shift[]
-  announcements Announcement[]
-  conversations Conversation[]
+  id               String         @id @default(uuid())
+  name             String         @unique
+  createdAt        DateTime       @default(now())
+  minStaffPerShift Int            @default(1)
+  cyclePattern     String? // JSON array for shared department cycle
+  cycleLength      Int? // length of the cycle
+  referenceDate    String? // "2026-06-01" reference date
+  shiftTypes       ShiftType[]
+  users            User[]
+  shifts           Shift[]
+  announcements    Announcement[]
+  conversations    Conversation[]
 }
 
 model ShiftType {
-  id           String @id @default(uuid())
+  id           String  @id @default(uuid())
   name         String
   startTime    String
   endTime      String
@@ -159,7 +159,7 @@ model StaffProfile {
 
 model HospitalSettings {
   id             String  @id @default(uuid())
-  singleton      Boolean @default(true) @unique
+  singleton      Boolean @unique @default(true)
   name           String
   latitude       Float
   longitude      Float
@@ -180,9 +180,9 @@ model Shift {
   date         DateTime
   createdAt    DateTime @default(now())
 
-  user         User               @relation(fields: [userId],       references: [id])
+  user         User               @relation(fields: [userId], references: [id])
   department   Department         @relation(fields: [departmentId], references: [id])
-  shiftType    ShiftType          @relation(fields: [shiftTypeId],  references: [id])
+  shiftType    ShiftType          @relation(fields: [shiftTypeId], references: [id])
   attendance   AttendanceRecord?
   swapRequests ShiftSwapRequest[] @relation("OriginalShift")
   swapTargets  ShiftSwapRequest[] @relation("TargetShift")
@@ -197,10 +197,10 @@ model ShiftSwapRequest {
   status          SwapStatus @default(PENDING)
   createdAt       DateTime   @default(now())
 
-  requester     User  @relation("SwapRequester", fields: [requesterId],     references: [id])
-  targetStaff   User  @relation("SwapTarget",    fields: [targetStaffId],   references: [id])
+  requester     User  @relation("SwapRequester", fields: [requesterId], references: [id])
+  targetStaff   User  @relation("SwapTarget", fields: [targetStaffId], references: [id])
   originalShift Shift @relation("OriginalShift", fields: [originalShiftId], references: [id])
-  targetShift   Shift @relation("TargetShift",   fields: [targetShiftId],   references: [id])
+  targetShift   Shift @relation("TargetShift", fields: [targetShiftId], references: [id])
 }
 
 // ─── ATTENDANCE ───────────────────────────────────────────
@@ -216,7 +216,7 @@ model AttendanceRecord {
   status           AttendanceStatus @default(ABSENT)
   createdAt        DateTime         @default(now())
 
-  user  User  @relation(fields: [userId],  references: [id])
+  user  User  @relation(fields: [userId], references: [id])
   shift Shift @relation(fields: [shiftId], references: [id])
 }
 
@@ -235,8 +235,8 @@ model LeaveApplication {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  user     User  @relation("LeaveApplicant", fields: [userId],     references: [id])
-  reviewer User? @relation("LeaveReviewer",  fields: [reviewedBy], references: [id])
+  user     User  @relation("LeaveApplicant", fields: [userId], references: [id])
+  reviewer User? @relation("LeaveReviewer", fields: [reviewedBy], references: [id])
 }
 
 model LeaveBalance {
@@ -272,7 +272,7 @@ model ConversationMember {
   joinedAt       DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
-  user         User         @relation(fields: [userId],         references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@unique([conversationId, userId])
 }
@@ -284,8 +284,8 @@ model Message {
   content        String
   createdAt      DateTime @default(now())
 
-  conversation Conversation        @relation(fields: [conversationId], references: [id])
-  sender       User                @relation("SentMessages", fields: [senderId], references: [id])
+  conversation Conversation         @relation(fields: [conversationId], references: [id])
+  sender       User                 @relation("SentMessages", fields: [senderId], references: [id])
   readReceipts MessageReadReceipt[]
 }
 
@@ -296,7 +296,7 @@ model MessageReadReceipt {
   readAt    DateTime @default(now())
 
   message Message @relation(fields: [messageId], references: [id])
-  user    User    @relation(fields: [userId],    references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId])
 }
@@ -310,7 +310,7 @@ model Announcement {
   createdAt    DateTime @default(now())
 
   department Department? @relation(fields: [departmentId], references: [id])
-  author     User        @relation(fields: [authorId],     references: [id])
+  author     User        @relation(fields: [authorId], references: [id])
 }
 
 // ─── PUBLIC ───────────────────────────────────────────────
@@ -376,4 +376,13 @@ model Post {
   updatedAt  DateTime @updatedAt
 
   author User @relation(fields: [authorId], references: [id])
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  category  String
+  message   String
+  createdAt DateTime @default(now())
 }

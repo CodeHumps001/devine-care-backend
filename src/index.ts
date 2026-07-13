@@ -19,6 +19,9 @@ import { router as jobRoutes } from "./modules/jobs/jobs.routes";
 import { router as reviewRoutes } from "./modules/reviews/reviews.routes";
 import { router as appointmentRoutes } from "./modules/appointments/appointments.routes";
 import { router as settingsRoutes } from "./modules/settings/settings.routes"; // NEW
+import { router as uploadRouter } from "./modules/upload/upload.routes";
+import { router as feedbackRouter } from "./modules/feedback/feedback.routes";
+
 import { errorHandler } from "./middlewares/error.middleware";
 import { scheduleAttendanceJobs } from "./jobs/attendance.jobs";
 import { initializeChatGateway } from "./modules/chat/chat.gateway";
@@ -62,6 +65,8 @@ app.use("/api/v1/appointments", appointmentRoutes);
 app.use("/api/v1/jobs", jobRoutes);
 app.use("/api/v1/reviews", reviewRoutes);
 app.use("/api/v1/settings", settingsRoutes); // NEW
+app.use("/api/v1/upload", uploadRouter);
+app.use("/api/v1/feedback", feedbackRouter);
 
 app.get("/api/v1/health", (req, res) => {
   res.json({ status: "LifeCare API is running" });

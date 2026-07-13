@@ -279,3 +279,48 @@ export const loginUser = async (email: string, password: string) => {
     },
   };
 };
+
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) => {
+  // step 1 — get the user's current hashed password
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, password: true }, // adjust field name if different
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  // step 2 — verify the current password is correct
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new AppError("Current password is incorrect", 400);
+  }
+
+  // step 3 — block reusing the same password
+  const isSame = await bcrypt.compare(newPassword, user.password);
+  if (isSame) {
+    throw new AppError(
+      "New password must be different from the current password",
+      400,
+    );
+  }
+
+  // step 4 — basic strength check (adjust to your existing register validation)
+  if (newPassword.length < 8) {
+    throw new AppError("Password must be at least 8 characters", 400);
+  }
+
+  // step 5 — hash and update
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashedPassword },
+  });
+
+  return { message: "Password changed successfully" };
+};

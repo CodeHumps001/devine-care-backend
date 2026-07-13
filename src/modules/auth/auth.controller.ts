@@ -1,5 +1,7 @@
-import { Response, Request } from "express";
-import { loginUser, registerUser } from "./auth.service";
+import { Response, Request, NextFunction } from "express";
+import { changePassword, loginUser, registerUser } from "./auth.service";
+import { AppError } from "../../middlewares/error.middleware";
+import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 
 const register = async (req: Request, res: Response) => {
   try {
@@ -44,4 +46,27 @@ const login = async (req: Request, res: Response) => {
   }
 };
 
-export { register, login };
+const changeMyPassword = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 403);
+    }
+    const userId = req.user.id as string;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      throw new AppError("Current password and new password are required", 400);
+    }
+
+    const data = await changePassword(userId, currentPassword, newPassword);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export { register, login, changeMyPassword };
