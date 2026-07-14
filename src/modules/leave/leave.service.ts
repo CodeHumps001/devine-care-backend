@@ -78,6 +78,28 @@ const createLeave = async (
     },
   });
 
+  // step 6 — notify the department head(s) that a new request needs review
+  const applicant = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, lastName: true, departmentId: true },
+  });
+
+  if (applicant?.departmentId) {
+    const deptHeads = await prisma.user.findMany({
+      where: { departmentId: applicant.departmentId, role: "DEPT_HEAD" },
+      select: { expoPushToken: true },
+    });
+
+    for (const head of deptHeads) {
+      void sendPushNotification(
+        head.expoPushToken,
+        "New Leave Request",
+        `${applicant.firstName} ${applicant.lastName} requested ${leaveType.toLowerCase()} leave`,
+        { type: "LEAVE_SUBMITTED", leaveId: leave.id },
+      );
+    }
+  }
+
   return leave;
 };
 

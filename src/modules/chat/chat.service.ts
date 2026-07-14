@@ -1,5 +1,7 @@
+// modules/chat/chat.service.ts
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
+import { sendPushNotification } from "../../utils/pushNotifications";
 
 const createDirectConversation = async (
   userId: string,
@@ -84,23 +86,30 @@ const createGroupConversation = async (departmentId: string) => {
   return conversation;
 };
 
+// modules/chat/chat.service.ts — update getMyConversations
 const getMyConversations = async (userId: string) => {
-  // get all conversations this user is part of
   const conversations = await prisma.conversation.findMany({
     where: {
       members: { some: { userId } },
     },
     include: {
+      department: { select: { name: true } },
       members: {
         include: {
           user: {
-            select: { firstName: true, lastName: true, position: true },
+            select: {
+              firstName: true,
+              lastName: true,
+              position: true,
+              isActive: true,
+              profile: { select: { photoUrl: true } },
+            },
           },
         },
       },
       messages: {
         orderBy: { createdAt: "desc" },
-        take: 1, // last message preview
+        take: 1,
       },
     },
   });
@@ -163,6 +172,30 @@ const saveMessage = async (
       },
     },
   });
+
+  // ── Notify other conversation members who aren't the sender ──
+  // (fires for both DIRECT and GROUP conversations — group chats will
+  // push to every other member, which is the expected behavior)
+  const otherMembers = await prisma.conversationMember.findMany({
+    where: { conversationId, userId: { not: senderId } },
+    include: { user: { select: { expoPushToken: true } } },
+  });
+
+  const senderName = `${message.sender.firstName} ${message.sender.lastName}`;
+  const notificationBody =
+    content.length > 100 ? `${content.slice(0, 97)}...` : content;
+
+  for (const m of otherMembers) {
+    void sendPushNotification(
+      m.user.expoPushToken,
+      senderName,
+      notificationBody,
+      {
+        type: "NEW_MESSAGE",
+        conversationId,
+      },
+    );
+  }
 
   return message;
 };

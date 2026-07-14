@@ -154,12 +154,33 @@ const getMyAttendance = async (userId: string) => {
 
   return records;
 };
-const getDepartmentAttendance = async (departmentId: string) => {
+const getDepartmentAttendance = async (
+  departmentId: string,
+  dateString?: string,
+) => {
+  let clockInFilter = {};
+
+  if (dateString) {
+    const targetDate = new Date(dateString);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    clockInFilter = {
+      clockIn: {
+        gte: targetDate,
+        lt: nextDay,
+      },
+    };
+  }
+
   const records = await prisma.attendanceRecord.findMany({
     where: {
       shift: {
         departmentId,
       },
+      ...clockInFilter, // Dynamically spreads the clock-in filter if it exists
     },
     include: {
       user: {
