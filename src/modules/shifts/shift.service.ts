@@ -5,6 +5,7 @@ import { allowedNodeEnvironmentFlags } from "node:process";
 import {
   calculateDaysSinceReference,
   DEPARTMENT_CYCLES,
+  PERSONAL_CYCLES,
   getSlotMapForDepartment,
   SlotKey,
 } from "../../utils/shiftAlgorithm";
@@ -153,28 +154,95 @@ const generateShift = async (
     );
     console.log(`🔍 SlotMap:`, slotMap);
 
+    // Staff who fall through to Priority 4 (no personalCycle, no
+    // departmentCycle, no staffGroups match) all share this precomputed
+    // daily slot pattern instead of each rebuilding — and re-validating —
+    // it from scratch on every single day/staff iteration.
+    let genericDailySlots: string[] | null = null;
+    if (!departmentCycle) {
+      const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
+
+      if (workingShifts.length === 0) {
+        throw new AppError(
+          "This department has no working shift types configured yet — add at least one (e.g. Morning, Night) before generating a schedule.",
+          400,
+        );
+      }
+
+      const requiredPerDay = workingShifts.length * department.minStaffPerShift;
+
+      if (requiredPerDay > staff.length) {
+        throw new AppError(
+          `Not enough staff to auto-generate this schedule: ${workingShifts.length} shift type(s) each need ${department.minStaffPerShift} staff member(s) (${requiredPerDay} total), but this department only has ${staff.length} staff member(s). Lower "minimum staff per shift" on the department, or add more staff.`,
+          400,
+        );
+      }
+
+      if (requiredPerDay < staff.length && !offShiftType) {
+        throw new AppError(
+          "This department has more staff than shift slots but no day-off shift type configured — add one so the remaining staff can be scheduled off.",
+          400,
+        );
+      }
+
+      const slots: string[] = [];
+      workingShifts.forEach((shiftType) => {
+        for (let i = 0; i < department.minStaffPerShift; i++) {
+          slots.push(shiftType.id);
+        }
+      });
+      while (slots.length < staff.length) {
+        slots.push((offShiftType as (typeof shiftTypes)[number]).id);
+      }
+
+      genericDailySlots = slots;
+    }
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
 
-      staff.forEach((member) => {
+      staff.forEach((member, staffIndex) => {
         let shiftTypeId: string | undefined;
 
+        // Try to match hardcoded cycle fallback for staff (Priority 1 support)
+        const hardcodedCycle = PERSONAL_CYCLES[member.firstName.toLowerCase()];
+
         // ─── PRIORITY 1: Personal Cycle (Pharmacy with real calendar) ───
-        // Each staff member has their own cycle stored in the database
-        if (member.personalCycle) {
+        if (member.personalCycle || hardcodedCycle) {
           try {
-            const cycle = JSON.parse(member.personalCycle) as SlotKey[];
-            const referenceDate = member.cycleStartDate || "2026-06-01";
+            let cycle: SlotKey[];
+            let referenceDate: string;
+            let offset: number;
+
+            if (member.personalCycle) {
+              cycle = JSON.parse(member.personalCycle) as SlotKey[];
+              referenceDate = member.cycleStartDate || "2026-06-01";
+              offset = member.cycleOffset || 0;
+            } else {
+              cycle = hardcodedCycle.cycle;
+              referenceDate = hardcodedCycle.referenceDate;
+              offset = hardcodedCycle.offset;
+            }
+
             const dayIndex = calculateDaysSinceReference(
               referenceDate,
               year,
               month,
               day,
             );
+
+            // FIX: Safely handle negative modulo in JavaScript
             const cyclePosition =
-              (member.cycleOffset + dayIndex) % cycle.length;
+              (((offset + dayIndex) % cycle.length) + cycle.length) %
+              cycle.length;
             const slot = cycle[cyclePosition];
             shiftTypeId = slotMap[slot];
+
+            if (!shiftTypeId) {
+              throw new Error(
+                `personalCycle slot "${slot}" has no matching shift type in ${department.name}`,
+              );
+            }
 
             // Debug first 3 days
             if (day <= 3) {
@@ -183,15 +251,18 @@ const generateShift = async (
               );
             }
           } catch (error) {
-            console.error(
-              `❌ Failed to parse personalCycle for ${member.firstName}:`,
-              error,
+            throw new AppError(
+              `Failed to apply personal cycle for ${member.firstName} ${member.lastName}: ${
+                error instanceof Error
+                  ? error.message
+                  : "invalid personalCycle data"
+              }. Fix their personal cycle before generating this schedule.`,
+              400,
             );
           }
         }
 
         // ─── PRIORITY 2: Department Cycle (Records, OPD, etc.) ───
-        // Department-wide shared cycle
         else if (departmentCycle) {
           const { cycle, cycleLength, referenceDate } = departmentCycle;
           const dayIndex = calculateDaysSinceReference(
@@ -200,7 +271,11 @@ const generateShift = async (
             month,
             day,
           );
-          const cyclePosition = (member.cycleOffset + dayIndex) % cycleLength;
+
+          // FIX: Safely handle negative modulo
+          const cyclePosition =
+            (((member.cycleOffset + dayIndex) % cycleLength) + cycleLength) %
+            cycleLength;
           const slot = cycle[cyclePosition] as SlotKey;
           shiftTypeId = slotMap[slot];
 
@@ -213,7 +288,6 @@ const generateShift = async (
         }
 
         // ─── PRIORITY 3: Staff Groups (Pharmacy fallback) ───
-        // Groups assigned in the UI (Morning, Night, Rotating)
         else if (staffGroups) {
           const isMorning = staffGroups.morning?.includes(member.id);
           const isNight = staffGroups.night?.includes(member.id);
@@ -241,7 +315,9 @@ const generateShift = async (
               day,
             );
             const offset = Math.round((morningIndex * 7) / morningStaff.length);
-            const cyclePosition = (offset + dayIndex) % 7;
+
+            // FIX: Safely handle negative modulo
+            const cyclePosition = (((offset + dayIndex) % 7) + 7) % 7;
             shiftTypeId = slotMap[morningCycle[cyclePosition]];
           } else if (isNight) {
             const nightCycle: SlotKey[] = [
@@ -265,7 +341,9 @@ const generateShift = async (
               day,
             );
             const offset = Math.round((nightIndex * 8) / nightStaff.length);
-            const cyclePosition = (offset + dayIndex) % 8;
+
+            // FIX: Safely handle negative modulo
+            const cyclePosition = (((offset + dayIndex) % 8) + 8) % 8;
             shiftTypeId = slotMap[nightCycle[cyclePosition]];
           } else if (isRotating) {
             const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
@@ -298,47 +376,25 @@ const generateShift = async (
             );
             const spacing = Math.round(slots.length / totalRotating);
             const offset = (rotatingIndex * spacing) % slots.length;
-            const cyclePosition = (offset + dayIndex) % slots.length;
+
+            // FIX: Safely handle negative modulo
+            const cyclePosition =
+              (((offset + dayIndex) % slots.length) + slots.length) %
+              slots.length;
             shiftTypeId = slotMap[slots[cyclePosition]];
           }
         }
 
         // ─── PRIORITY 4: Generic Fallback ───
-        // For departments with no configuration
-        else {
-          const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
-          const totalStaff = staff.length;
-          const slots: string[] = [];
+        else if (genericDailySlots) {
+          const cycleLength = genericDailySlots.length;
+          const slotIndex = (staffIndex + (day - 1)) % cycleLength;
+          shiftTypeId = genericDailySlots[slotIndex];
 
-          workingShifts.forEach((shiftType) => {
-            for (let i = 0; i < department.minStaffPerShift; i++) {
-              slots.push(shiftType.id);
-            }
-          });
-
-          while (slots.length < totalStaff) {
-            if (offShiftType) slots.push(offShiftType.id);
-          }
-
-          const rotationCycle = Math.floor((day - 1) / 2);
-          const slotIndex =
-            (staff.findIndex((s) => s.id === member.id) + rotationCycle) %
-            totalStaff;
-          shiftTypeId = slots[slotIndex];
-        }
-
-        // ─── FALLBACK: Ensure every staff gets a shift ───
-        // If no shift type found, assign Off or default working shift
-        if (!shiftTypeId) {
-          if (day <= 3) {
+          if (day === 1) {
             console.log(
-              `   ⚠️ No shiftTypeId for ${member.firstName} on day ${day}, using fallback`,
+              `   📌 ${member.firstName} (generic fallback): slotIndex=${slotIndex}, cycleLength=${cycleLength}`,
             );
-          }
-          if (offShiftType) {
-            shiftTypeId = offShiftType.id;
-          } else if (defaultWorkingShift) {
-            shiftTypeId = defaultWorkingShift.id;
           }
         }
 
@@ -351,7 +407,7 @@ const generateShift = async (
           });
         } else {
           console.error(
-            `❌ Still no shiftTypeId for ${member.firstName} on day ${day}`,
+            `❌ No shiftTypeId resolved for ${member.firstName} on day ${day} — this staff member was NOT scheduled for this day.`,
           );
         }
       });
