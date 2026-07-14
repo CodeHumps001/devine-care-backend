@@ -154,10 +154,7 @@ const generateShift = async (
     );
     console.log(`🔍 SlotMap:`, slotMap);
 
-    // Staff who fall through to Priority 4 (no personalCycle, no
-    // departmentCycle, no staffGroups match) all share this precomputed
-    // daily slot pattern instead of each rebuilding — and re-validating —
-    // it from scratch on every single day/staff iteration.
+    // Setup fallback slots structure without failing due to strict staff limits
     let genericDailySlots: string[] | null = null;
     if (!departmentCycle) {
       const workingShifts = shiftTypes.filter((s) => !s.isDayOff);
@@ -169,30 +166,18 @@ const generateShift = async (
         );
       }
 
-      const requiredPerDay = workingShifts.length * department.minStaffPerShift;
-
-      if (requiredPerDay > staff.length) {
-        throw new AppError(
-          `Not enough staff to auto-generate this schedule: ${workingShifts.length} shift type(s) each need ${department.minStaffPerShift} staff member(s) (${requiredPerDay} total), but this department only has ${staff.length} staff member(s). Lower "minimum staff per shift" on the department, or add more staff.`,
-          400,
-        );
-      }
-
-      if (requiredPerDay < staff.length && !offShiftType) {
-        throw new AppError(
-          "This department has more staff than shift slots but no day-off shift type configured — add one so the remaining staff can be scheduled off.",
-          400,
-        );
-      }
-
       const slots: string[] = [];
       workingShifts.forEach((shiftType) => {
         for (let i = 0; i < department.minStaffPerShift; i++) {
           slots.push(shiftType.id);
         }
       });
-      while (slots.length < staff.length) {
-        slots.push((offShiftType as (typeof shiftTypes)[number]).id);
+
+      // Safely pad with off shifts only if we have more staff than required slots and an off shift exists
+      if (offShiftType) {
+        while (slots.length < staff.length) {
+          slots.push(offShiftType.id);
+        }
       }
 
       genericDailySlots = slots;
