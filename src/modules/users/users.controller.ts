@@ -5,6 +5,7 @@ import {
   userDelete,
   deactivateUser,
   updateProfile,
+  savePushToken,
 } from "./users.service";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { AppError } from "../../middlewares/error.middleware";
@@ -76,6 +77,22 @@ const getMyProfile = async (
     next(err);
   }
 };
+
+const registerPushToken = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    const { expoPushToken } = req.body;
+    if (!expoPushToken) throw new AppError("expoPushToken is required", 400);
+    const data = await savePushToken(req.user.id, expoPushToken);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
 export {
   getUser,
   getUsers,
@@ -83,4 +100,5 @@ export {
   deleteUser,
   deactivate,
   getMyProfile,
+  registerPushToken,
 };

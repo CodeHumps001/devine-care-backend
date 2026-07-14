@@ -235,9 +235,14 @@ export const registerUser = async (
 
 // ─── LOGIN (unchanged) ──────────────────────────────────
 
+// ─── LOGIN (now includes department + profile) ──────────
 export const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
     where: { email },
+    include: {
+      department: { select: { id: true, name: true } },
+      profile: true,
+    },
   });
 
   if (!user) {
@@ -276,19 +281,22 @@ export const loginUser = async (email: string, password: string) => {
       position: user.position,
       departmentId: user.departmentId,
       cycleOffset: user.cycleOffset,
+      department: user.department,
+      profile: user.profile,
     },
   };
 };
 
+// ─── CHANGE PASSWORD (now sends a confirmation email) ──────
 export const changePassword = async (
   userId: string,
   currentPassword: string,
   newPassword: string,
 ) => {
-  // step 1 — get the user's current hashed password
+  // step 1 — get the user's current hashed password + info needed for the email
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, password: true }, // adjust field name if different
+    select: { id: true, password: true, email: true, firstName: true },
   });
 
   if (!user) {
@@ -310,7 +318,7 @@ export const changePassword = async (
     );
   }
 
-  // step 4 — basic strength check (adjust to your existing register validation)
+  // step 4 — basic strength check
   if (newPassword.length < 8) {
     throw new AppError("Password must be at least 8 characters", 400);
   }
@@ -321,6 +329,60 @@ export const changePassword = async (
     where: { id: userId },
     data: { password: hashedPassword },
   });
+
+  // step 6 — notify the user their password was changed
+  try {
+    await sendEmail(
+      user.email,
+      "Divine Netcare Hospital — Your Password Was Changed",
+      `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #1a1a1a; }
+            .container { max-width: 500px; margin: 0 auto; padding: 20px; }
+            .header { text-align: center; padding: 20px 0; border-bottom: 2px solid #0ea5e9; }
+            .logo { font-size: 24px; font-weight: bold; color: #0ea5e9; }
+            .content { padding: 30px 0; }
+            .alert-box { background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 6px; padding: 16px; margin: 16px 0; }
+            .warning-box { background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 6px; padding: 16px; margin: 16px 0; }
+            .footer { text-align: center; padding-top: 20px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">Divine Netcare Hospital</div>
+            </div>
+            <div class="content">
+              <h2>Hi ${user.firstName},</h2>
+              <div class="alert-box">
+                <p>Your account password was changed successfully on ${new Date().toLocaleString(
+                  "en-US",
+                  { dateStyle: "medium", timeStyle: "short" },
+                )}.</p>
+              </div>
+              <div class="warning-box">
+                <p><strong>Wasn't you?</strong> If you did not make this change, please contact your administrator immediately to secure your account.</p>
+              </div>
+            </div>
+            <div class="footer">
+              <p>Divine Netcare Hospital · Quality Healthcare For All</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    );
+  } catch (emailErr) {
+    console.error(
+      "Failed to send password-change confirmation email:",
+      emailErr,
+    );
+    // don't fail the whole request just because the email failed
+  }
 
   return { message: "Password changed successfully" };
 };

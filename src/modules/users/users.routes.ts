@@ -6,6 +6,7 @@ import {
   deleteUser,
   deactivate,
   getMyProfile,
+  registerPushToken,
 } from "./users.controller";
 import {
   authMiddleware,
@@ -126,4 +127,5 @@ router.delete(
 );
 // users.routes.ts — add a self-serve GET
 router.get("/profile", authMiddleware, getMyProfile);
+router.post("/push-token", authMiddleware, registerPushToken);
 export { router };

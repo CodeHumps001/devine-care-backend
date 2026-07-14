@@ -1,6 +1,8 @@
 import { LeaveStatus, LeaveType } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
+// modules/leave/leave.service.ts — modify reviewLeave
+import { sendPushNotification } from "../../utils/pushNotifications";
 
 const createLeave = async (
   userId: string,
@@ -121,16 +123,8 @@ const reviewLeave = async (
   reviewedBy: string,
   reviewNote?: string,
 ) => {
-  // step 1 — find the leave application
-  const leave = await prisma.leaveApplication.findUnique({
-    where: { id },
-  });
-
-  if (!leave) {
-    throw new AppError("Leave application not found", 404);
-  }
-
-  // step 2 — block reviewing an already reviewed application
+  const leave = await prisma.leaveApplication.findUnique({ where: { id } });
+  if (!leave) throw new AppError("Leave application not found", 404);
   if (leave.status !== "PENDING") {
     throw new AppError(
       `Leave application already ${leave.status.toLowerCase()}`,
@@ -139,20 +133,14 @@ const reviewLeave = async (
   }
 
   if (status === "APPROVED") {
-    // step 3 — calculate days to deduct from balance
     const diffMs = leave.endDate.getTime() - leave.startDate.getTime();
     const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
     const currentYear = new Date().getFullYear();
 
-    // step 4 — run transaction: update application + deduct leave balance
     await prisma.$transaction([
       prisma.leaveApplication.update({
         where: { id },
-        data: {
-          status: "APPROVED",
-          reviewedBy,
-          reviewNote,
-        },
+        data: { status: "APPROVED", reviewedBy, reviewNote },
       }),
       prisma.leaveBalance.update({
         where: {
@@ -162,22 +150,29 @@ const reviewLeave = async (
             year: currentYear,
           },
         },
-        data: {
-          usedDays: { increment: days },
-        },
+        data: { usedDays: { increment: days } },
       }),
     ]);
   } else {
-    // step 5 — just update status if rejected
     await prisma.leaveApplication.update({
       where: { id },
-      data: {
-        status: "REJECTED",
-        reviewedBy,
-        reviewNote,
-      },
+      data: { status: "REJECTED", reviewedBy, reviewNote },
     });
   }
+
+  // ── Notify the staff member ──
+  const applicant = await prisma.user.findUnique({
+    where: { id: leave.userId },
+    select: { expoPushToken: true },
+  });
+  await sendPushNotification(
+    applicant?.expoPushToken,
+    status === "APPROVED" ? "Leave Approved" : "Leave Rejected",
+    status === "APPROVED"
+      ? "Your leave request has been approved."
+      : "Your leave request has been rejected.",
+    { type: "LEAVE_REVIEW", leaveId: id },
+  );
 
   return { message: `Leave application ${status.toLowerCase()}` };
 };

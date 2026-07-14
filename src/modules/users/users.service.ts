@@ -104,4 +104,19 @@ const userDelete = async (id: string) => {
   ]);
 };
 
-export { user, users, userDelete, deactivateUser, updateProfile };
+const savePushToken = async (userId: string, expoPushToken: string) => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { expoPushToken },
+  });
+  return { message: "Push token saved" };
+};
+
+export {
+  user,
+  users,
+  userDelete,
+  deactivateUser,
+  updateProfile,
+  savePushToken,
+};

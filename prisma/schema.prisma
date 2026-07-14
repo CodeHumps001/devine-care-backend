@@ -101,6 +101,7 @@ model User {
   personalCycle  String? // JSON array e.g. ["M","M","M","M","M","O","O"]
   cycleOffset    Int       @default(0)
   cycleStartDate String? // "2026-06-01" reference date for this person
+  expoPushToken String?
 
   department           Department?          @relation(fields: [departmentId], references: [id])
   profile              StaffProfile?
