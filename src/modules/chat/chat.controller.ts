@@ -4,6 +4,7 @@ import {
   createDirectConversation,
   getMyConversations,
   getConversationMessages,
+  createGroupConversation,
 } from "./chat.service";
 import { AppError } from "../../middlewares/error.middleware";
 
@@ -54,4 +55,25 @@ const conversationMessages = async (
   }
 };
 
-export { directConversation, conversationMessages, myConversations };
+const myGroupChat = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    if (!req.user.departmentId)
+      throw new AppError("No department assigned", 400);
+    const data = await createGroupConversation(req.user.departmentId);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export {
+  directConversation,
+  conversationMessages,
+  myConversations,
+  myGroupChat,
+};

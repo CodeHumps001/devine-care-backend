@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { AppError } from "../../middlewares/error.middleware";
+import { uploadImageBuffer } from "../upload/upload.service";
 import {
   createPost,
   deletePost,
+  getAllPosts,
   getPost,
   getPosts,
   publishPost,
@@ -21,16 +23,28 @@ const makePost = async (
     }
 
     const authorId = req.user.id;
-    const { content, coverImage, title } = req.body;
+    const { content, title } = req.body;
+
     if (!content || !title) {
       throw new AppError("Title and content are required", 400);
     }
+
+    // Process and upload file to Cloudinary if provided
+    let coverImage = "";
+    if (req.file) {
+      coverImage = await uploadImageBuffer(
+        req.file.buffer,
+        "divine-netcare/posts",
+      );
+    }
+
     const data = await createPost(title, content, authorId, coverImage);
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
   }
 };
+
 const viewPosts = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -43,6 +57,7 @@ const viewPosts = async (
     next(err);
   }
 };
+
 const modifyPost = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -53,12 +68,23 @@ const modifyPost = async (
     const id = req.params.id as string;
     const authorId = req.user.id;
     const { content, title } = req.body;
-    const data = await updatePost(id, authorId, title, content);
+
+    let coverImage: string | undefined = undefined;
+    if (req.file) {
+      coverImage = await uploadImageBuffer(
+        req.file.buffer,
+        "divine-netcare/posts",
+      );
+    }
+
+    // Fixed: coverImage is now correctly forwarded to updatePost
+    const data = await updatePost(id, authorId, title, content, coverImage);
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
   }
 };
+
 const delPost = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -76,6 +102,20 @@ const delPost = async (
     next(err);
   }
 };
+
+const viewAllPosts = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const data = await getAllPosts();
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const viewPostById = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -84,11 +124,12 @@ const viewPostById = async (
   try {
     const id = req.params.id as string;
     const data = await getPost(id);
-    res.status(200).json({ status: "success", data }); // 200 not 201
+    res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
   }
 };
+
 const publish = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -108,4 +149,12 @@ const publish = async (
   }
 };
 
-export { viewPosts, viewPostById, makePost, delPost, modifyPost, publish };
+export {
+  viewPosts,
+  viewPostById,
+  makePost,
+  delPost,
+  modifyPost,
+  publish,
+  viewAllPosts,
+};

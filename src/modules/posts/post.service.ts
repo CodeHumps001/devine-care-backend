@@ -18,6 +18,7 @@ const createPost = async (
 
   return data;
 };
+
 const getPosts = async () => {
   const data = await prisma.post.findMany({
     where: { published: true }, // only published
@@ -34,20 +35,28 @@ const getPosts = async () => {
   });
   return data;
 };
+
 const updatePost = async (
   id: string,
   authorId: string,
   title: string,
   content: string,
+  coverImage?: string, // Added support for cover images in edit updates
 ) => {
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) throw new AppError("Post not found", 404);
   if (post.authorId !== authorId)
     throw new AppError("You can only edit your own posts", 403);
 
+  // Generate payload dynamically to preserve old image if no new file is uploaded
+  const updatePayload: Record<string, any> = { title, content };
+  if (coverImage !== undefined) {
+    updatePayload.coverImage = coverImage;
+  }
+
   return await prisma.post.update({
     where: { id },
-    data: { title, content },
+    data: updatePayload,
   });
 };
 
@@ -59,20 +68,30 @@ const deletePost = async (id: string, authorId: string) => {
 
   return await prisma.post.delete({ where: { id } });
 };
+
 const getPost = async (id: string) => {
   const data = await prisma.post.findFirst({
     where: { id },
     select: {
+      id: true,
       title: true,
       content: true,
       coverImage: true,
+      createdAt: true,
+      author: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
     },
   });
   if (!data) {
-    throw new AppError("Post not foun ", 404);
+    throw new AppError("Post not found", 404);
   }
   return data;
 };
+
 const publishPost = async (id: string, authorId: string) => {
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) throw new AppError("Post not found", 404);
@@ -85,4 +104,34 @@ const publishPost = async (id: string, authorId: string) => {
   });
 };
 
-export { createPost, getPost, getPosts, deletePost, updatePost, publishPost };
+const getAllPosts = async () => {
+  const data = await prisma.post.findMany({
+    select: {
+      id: true,
+      title: true,
+      content: true,
+      coverImage: true,
+      published: true, // Crucial for displaying status
+      createdAt: true,
+      updatedAt: true, // Crucial for displaying update times
+      authorId: true, // Crucial for the frontend permission check
+      author: {
+        select: { firstName: true, lastName: true },
+      },
+    },
+    orderBy: {
+      updatedAt: "desc", // Show recently modified posts first
+    },
+  });
+  return data;
+};
+
+export {
+  createPost,
+  getPost,
+  getPosts,
+  deletePost,
+  updatePost,
+  publishPost,
+  getAllPosts,
+};

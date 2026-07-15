@@ -3,6 +3,7 @@ import {
   directConversation,
   conversationMessages,
   myConversations,
+  myGroupChat,
 } from "./chat.controller";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 
@@ -41,6 +42,7 @@ router.post("/conversations", authMiddleware, directConversation);
  *         description: List of conversations with last message preview
  */
 router.get("/conversations", authMiddleware, myConversations);
+router.get("/my-group", authMiddleware, myGroupChat);
 
 /**
  * @swagger

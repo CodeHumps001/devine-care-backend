@@ -1,6 +1,8 @@
 import express from "express";
+import multer from "multer";
 import {
   viewPosts,
+  viewAllPosts, // Added viewAllPosts for admin moderation
   viewPostById,
   makePost,
   delPost,
@@ -15,6 +17,18 @@ import { Role } from "@prisma/client";
 
 const router = express.Router();
 
+// Multer memory storage configuration for cover image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed") as any, false);
+    }
+    cb(null, true);
+  },
+});
+
 /**
  * @swagger
  * /posts:
@@ -24,24 +38,29 @@ const router = express.Router();
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required: [title, content]
  *             properties:
  *               title:
  *                 type: string
- *                 example: Divine Netcare Launches New Maternity Wing
  *               content:
  *                 type: string
  *               coverImage:
  *                 type: string
- *                 example: https://cloudinary.com/image.jpg
+ *                 format: binary
  *     responses:
  *       201:
  *         description: Post created as draft
  */
-router.post("/", authMiddleware, authorizeRoles(Role.SUPER_ADMIN), makePost);
+router.post(
+  "/",
+  authMiddleware,
+  authorizeRoles(Role.SUPER_ADMIN),
+  upload.single("coverImage"),
+  makePost,
+);
 
 /**
  * @swagger
@@ -55,6 +74,23 @@ router.post("/", authMiddleware, authorizeRoles(Role.SUPER_ADMIN), makePost);
  *         description: List of published posts
  */
 router.get("/", viewPosts);
+
+/**
+ * @swagger
+ * /posts/admin:
+ *   get:
+ *     summary: Get all posts including drafts (admin only)
+ *     tags: [Blog Posts]
+ *     responses:
+ *       200:
+ *         description: List of all posts
+ */
+router.get(
+  "/admin",
+  authMiddleware,
+  authorizeRoles(Role.SUPER_ADMIN),
+  viewAllPosts,
+);
 
 /**
  * @swagger
@@ -99,6 +135,7 @@ router.put(
   "/:id",
   authMiddleware,
   authorizeRoles(Role.SUPER_ADMIN),
+  upload.single("coverImage"),
   modifyPost,
 );
 
