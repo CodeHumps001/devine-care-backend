@@ -34,6 +34,18 @@ dotenv.config();
 const app = express();
 const router = express.Router();
 
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://divinenetcarehospital.vercel.app",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 // create HTTP server from express app
 const httpServer = createServer(app);
 
