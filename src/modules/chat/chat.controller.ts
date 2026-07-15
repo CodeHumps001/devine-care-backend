@@ -5,6 +5,7 @@ import {
   getMyConversations,
   getConversationMessages,
   createGroupConversation,
+  syncAllGroupChats,
 } from "./chat.service";
 import { AppError } from "../../middlewares/error.middleware";
 
@@ -71,9 +72,23 @@ const myGroupChat = async (
   }
 };
 
+const syncGroupChats = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const data = await syncAllGroupChats();
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export {
   directConversation,
   conversationMessages,
   myConversations,
   myGroupChat,
+  syncGroupChats,
 };

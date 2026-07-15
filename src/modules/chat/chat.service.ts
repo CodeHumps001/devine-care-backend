@@ -49,15 +49,8 @@ const createDirectConversation = async (
   return conversation;
 };
 
+// modules/chat/chat.service.ts — replace createGroupConversation
 const createGroupConversation = async (departmentId: string) => {
-  // step 1 — check if group conversation already exists for this department
-  const existing = await prisma.conversation.findFirst({
-    where: { type: "GROUP", departmentId },
-  });
-
-  if (existing) return existing;
-
-  // step 2 — get all users in the department
   const department = await prisma.department.findUnique({
     where: { id: departmentId },
     include: { users: true },
@@ -67,21 +60,67 @@ const createGroupConversation = async (departmentId: string) => {
     throw new AppError("Department not found", 404);
   }
 
-  // step 3 — create group conversation and add all department members
-  const conversation = await prisma.$transaction(async (tx) => {
-    const newConversation = await tx.conversation.create({
-      data: { type: "GROUP", departmentId },
-    });
+  const currentMemberIds = department.users.map((u) => u.id);
 
-    await tx.conversationMember.createMany({
-      data: department.users.map((user) => ({
-        conversationId: newConversation.id,
-        userId: user.id,
-      })),
-    });
-
-    return newConversation;
+  let conversation = await prisma.conversation.findFirst({
+    where: { type: "GROUP", departmentId },
+    include: { members: true },
   });
+
+  if (!conversation) {
+    // first time — create it with today's department members
+    conversation = await prisma.$transaction(async (tx) => {
+      const newConversation = await tx.conversation.create({
+        data: { type: "GROUP", departmentId },
+      });
+      await tx.conversationMember.createMany({
+        data: currentMemberIds.map((userId) => ({
+          conversationId: newConversation.id,
+          userId,
+        })),
+      });
+      return tx.conversation.findUniqueOrThrow({
+        where: { id: newConversation.id },
+        include: { members: true },
+      });
+    });
+    return conversation;
+  }
+
+  // ── Reconcile membership: add anyone new, remove anyone who left ──
+  const existingMemberIds = conversation.members.map((m) => m.userId);
+
+  const toAdd = currentMemberIds.filter(
+    (id) => !existingMemberIds.includes(id),
+  );
+  const toRemove = existingMemberIds.filter(
+    (id) => !currentMemberIds.includes(id),
+  );
+
+  if (toAdd.length > 0 || toRemove.length > 0) {
+    await prisma.$transaction([
+      ...(toAdd.length > 0
+        ? [
+            prisma.conversationMember.createMany({
+              data: toAdd.map((userId) => ({
+                conversationId: conversation!.id,
+                userId,
+              })),
+            }),
+          ]
+        : []),
+      ...(toRemove.length > 0
+        ? [
+            prisma.conversationMember.deleteMany({
+              where: {
+                conversationId: conversation!.id,
+                userId: { in: toRemove },
+              },
+            }),
+          ]
+        : []),
+    ]);
+  }
 
   return conversation;
 };
@@ -200,10 +239,32 @@ const saveMessage = async (
   return message;
 };
 
+// modules/chat/chat.service.ts — add
+const syncAllGroupChats = async () => {
+  const departments = await prisma.department.findMany({
+    select: { id: true },
+  });
+  const results = [];
+  for (const dept of departments) {
+    try {
+      await createGroupConversation(dept.id);
+      results.push({ departmentId: dept.id, status: "synced" });
+    } catch (err: any) {
+      results.push({
+        departmentId: dept.id,
+        status: "failed",
+        error: err.message,
+      });
+    }
+  }
+  return results;
+};
+
 export {
   createDirectConversation,
   createGroupConversation,
   getMyConversations,
   getConversationMessages,
   saveMessage,
+  syncAllGroupChats,
 };

@@ -1,3 +1,4 @@
+// modules/auth/auth.service.ts
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../../config/prisma";
@@ -10,6 +11,7 @@ import {
   calculateDaysSinceReference,
   SlotKey,
 } from "../../utils/shiftAlgorithm";
+import { createGroupConversation } from "../chat/chat.service";
 
 // ─── Helper: Calculate cycle offset for a staff member ──
 const calculateCycleOffsetForUser = (
@@ -17,11 +19,8 @@ const calculateCycleOffsetForUser = (
   departmentName: string,
   referenceDate: string = "2026-06-01",
 ): { offset: number; cycle: SlotKey[]; cycleLength: number } => {
-  // Check if there's a personal cycle defined for this staff member
-  // You can match by email or name pattern, or use position/department logic
   const personalCycleKey = `${departmentName.toLowerCase()}_${position.toLowerCase()}`;
 
-  // For Pharmacy staff with specific cycles
   if (departmentName.toLowerCase() === "pharmacy") {
     if (position === "PHARMACIST") {
       const cycle = ["M", "M", "M", "M", "M", "O", "O"] as SlotKey[];
@@ -38,7 +37,6 @@ const calculateCycleOffsetForUser = (
         cycleLength: cycle.length,
       };
     } else {
-      // Rotating cycle for other pharmacy staff
       const cycle = ["M", "M", "A", "A", "N", "N", "O", "O"] as SlotKey[];
       return {
         offset: 0,
@@ -48,11 +46,8 @@ const calculateCycleOffsetForUser = (
     }
   }
 
-  // For departments with shared cycles (Records, OPD, Maternity, etc.)
   const deptCycle = DEPARTMENT_CYCLES[departmentName.toLowerCase()];
   if (deptCycle) {
-    // Get all staff in this department to calculate offsets
-    // We'll calculate offset based on when they joined
     const today = new Date();
     const dayIndex = calculateDaysSinceReference(
       deptCycle.referenceDate,
@@ -61,7 +56,6 @@ const calculateCycleOffsetForUser = (
       today.getDate(),
     );
 
-    // Calculate offset based on join date (using today as default)
     const offset = dayIndex % deptCycle.cycleLength;
 
     return {
@@ -71,7 +65,6 @@ const calculateCycleOffsetForUser = (
     };
   }
 
-  // Default cycle for departments without defined cycles
   const defaultCycle = ["M", "M", "M", "M", "M", "O", "O"] as SlotKey[];
   return {
     offset: 0,
@@ -108,7 +101,6 @@ export const registerUser = async (
 
   if (departmentId) {
     try {
-      // Get department name
       const department = await prisma.department.findUnique({
         where: { id: departmentId },
         select: { name: true },
@@ -126,7 +118,6 @@ export const registerUser = async (
       }
     } catch (error) {
       console.error("Failed to calculate cycle offset:", error);
-      // Fallback to default
       cycleOffset = 0;
       personalCycle = ["M", "M", "M", "M", "M", "O", "O"];
       cycleStartDate = new Date().toISOString().split("T")[0];
@@ -183,6 +174,19 @@ export const registerUser = async (
     return newUser;
   });
 
+  // ── Sync the new staff member into their department's group chat immediately ──
+  // (createGroupConversation is idempotent and reconciles membership against
+  // the department's current user list, so this both creates the group on
+  // first use and adds this new hire to it without any manual step)
+  if (departmentId) {
+    try {
+      await createGroupConversation(departmentId);
+    } catch (error) {
+      console.error("Failed to sync department group chat:", error);
+      // don't fail account creation just because the chat sync failed
+    }
+  }
+
   // notify the new staff member with their login credentials
   try {
     await sendEmail(
@@ -233,9 +237,7 @@ export const registerUser = async (
   return user;
 };
 
-// ─── LOGIN (unchanged) ──────────────────────────────────
-
-// ─── LOGIN (now includes department + profile) ──────────
+// ─── LOGIN (includes department + profile) ──────────
 export const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -287,13 +289,12 @@ export const loginUser = async (email: string, password: string) => {
   };
 };
 
-// ─── CHANGE PASSWORD (now sends a confirmation email) ──────
+// ─── CHANGE PASSWORD (sends a confirmation email) ──────
 export const changePassword = async (
   userId: string,
   currentPassword: string,
   newPassword: string,
 ) => {
-  // step 1 — get the user's current hashed password + info needed for the email
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, password: true, email: true, firstName: true },
@@ -303,13 +304,11 @@ export const changePassword = async (
     throw new AppError("User not found", 404);
   }
 
-  // step 2 — verify the current password is correct
   const isMatch = await bcrypt.compare(currentPassword, user.password);
   if (!isMatch) {
     throw new AppError("Current password is incorrect", 400);
   }
 
-  // step 3 — block reusing the same password
   const isSame = await bcrypt.compare(newPassword, user.password);
   if (isSame) {
     throw new AppError(
@@ -318,19 +317,16 @@ export const changePassword = async (
     );
   }
 
-  // step 4 — basic strength check
   if (newPassword.length < 8) {
     throw new AppError("Password must be at least 8 characters", 400);
   }
 
-  // step 5 — hash and update
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id: userId },
     data: { password: hashedPassword },
   });
 
-  // step 6 — notify the user their password was changed
   try {
     await sendEmail(
       user.email,
@@ -381,7 +377,6 @@ export const changePassword = async (
       "Failed to send password-change confirmation email:",
       emailErr,
     );
-    // don't fail the whole request just because the email failed
   }
 
   return { message: "Password changed successfully" };

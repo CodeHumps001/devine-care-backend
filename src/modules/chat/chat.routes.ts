@@ -4,8 +4,13 @@ import {
   conversationMessages,
   myConversations,
   myGroupChat,
+  syncGroupChats,
 } from "./chat.controller";
-import { authMiddleware } from "../../middlewares/auth.middleware";
+import {
+  authMiddleware,
+  authorizeRoles,
+} from "../../middlewares/auth.middleware";
+import { Role } from "@prisma/client";
 
 const router = express.Router();
 
@@ -43,6 +48,12 @@ router.post("/conversations", authMiddleware, directConversation);
  */
 router.get("/conversations", authMiddleware, myConversations);
 router.get("/my-group", authMiddleware, myGroupChat);
+router.post(
+  "/sync-groups",
+  authMiddleware,
+  authorizeRoles(Role.SUPER_ADMIN),
+  syncGroupChats,
+);
 
 /**
  * @swagger
