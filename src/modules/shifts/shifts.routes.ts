@@ -5,6 +5,9 @@ import {
   getMyShift,
   createShift,
   updateShiftRequest,
+  myShiftSwapRequests,
+  departmentShiftSwapRequests,
+  colleagueShifts,
 } from "./shift.controller";
 import {
   authMiddleware,
@@ -129,6 +132,22 @@ router.get(
   authMiddleware,
   authorizeRoles(Role.SUPER_ADMIN, Role.DEPT_HEAD),
   getShiftByDepId,
+);
+
+router.get("/swap-requests/my", authMiddleware, myShiftSwapRequests);
+
+router.get(
+  "/swap-requests/department",
+  authMiddleware,
+  authorizeRoles(Role.DEPT_HEAD, Role.SUPER_ADMIN),
+  departmentShiftSwapRequests,
+);
+
+router.get(
+  "/colleagues",
+  authMiddleware,
+  authorizeRoles(Role.STAFF, Role.DEPT_HEAD),
+  colleagueShifts,
 );
 
 /**

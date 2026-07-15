@@ -260,6 +260,33 @@ const syncAllGroupChats = async () => {
   return results;
 };
 
+const markMessagesAsRead = async (conversationId: string, userId: string) => {
+  const member = await prisma.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+  });
+  if (!member) {
+    throw new AppError("You are not a member of this conversation", 403);
+  }
+
+  const unread = await prisma.message.findMany({
+    where: {
+      conversationId,
+      senderId: { not: userId },
+      readReceipts: { none: { userId } },
+    },
+    select: { id: true },
+  });
+
+  if (unread.length === 0) return { marked: 0 };
+
+  await prisma.messageReadReceipt.createMany({
+    data: unread.map((m) => ({ messageId: m.id, userId })),
+    skipDuplicates: true,
+  });
+
+  return { marked: unread.length };
+};
+
 export {
   createDirectConversation,
   createGroupConversation,
@@ -267,4 +294,5 @@ export {
   getConversationMessages,
   saveMessage,
   syncAllGroupChats,
+  markMessagesAsRead,
 };

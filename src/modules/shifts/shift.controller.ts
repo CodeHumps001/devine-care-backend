@@ -10,6 +10,9 @@ import {
   delShiftType,
   generateShift,
   patchSwapRequest,
+  getDepartmentSwapRequests,
+  getColleagueShifts,
+  getMySwapRequests,
 } from "./shift.service";
 import { AppError } from "../../middlewares/error.middleware";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
@@ -203,7 +206,53 @@ const updateShiftRequest = async (
   }
 };
 
+const myShiftSwapRequests = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    const data = await getMySwapRequests(req.user.id);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const departmentShiftSwapRequests = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    const departmentId =
+      (req.query.departmentId as string) || (req.user.departmentId as string);
+    if (!departmentId) throw new AppError("departmentId is required", 400);
+    const data = await getDepartmentSwapRequests(departmentId);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const colleagueShifts = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) throw new AppError("Unauthorized", 403);
+    const data = await getColleagueShifts(req.user.id);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export {
+  departmentShiftSwapRequests,
   shiftSwapRequest,
   getShiftTypeByDepId,
   getShiftByDepId,
@@ -213,4 +262,6 @@ export {
   updateShiftRequest,
   updateShiftType,
   deleteShiftType,
+  colleagueShifts,
+  myShiftSwapRequests,
 };

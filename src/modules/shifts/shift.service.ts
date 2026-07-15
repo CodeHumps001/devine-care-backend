@@ -9,7 +9,10 @@ import {
   getSlotMapForDepartment,
   SlotKey,
 } from "../../utils/shiftAlgorithm";
-import { sendBatchedPushNotifications } from "../../utils/pushNotifications";
+import {
+  sendBatchedPushNotifications,
+  sendPushNotification,
+} from "../../utils/pushNotifications";
 
 const postShiftType = async (
   name: string,
@@ -457,14 +460,18 @@ const generateShift = async (
     data: shiftsToCreate,
   });
 
-  const assignedUserIds = [
-    ...(staffGroups?.morning || []),
-    ...(staffGroups?.night || []),
-    ...(staffGroups?.rotating || []),
+  // ── Notify every staff member who actually got a shift created,
+  // derived from shiftsToCreate itself rather than the input staffGroups —
+  // this correctly covers auto mode (personal cycle, department cycle,
+  // staffGroups, or generic fallback) and manual mode alike, since all
+  // four paths converge into shiftsToCreate before this point.
+  const uniqueAssignedUserIds = [
+    ...new Set(shiftsToCreate.map((s) => s.userId)),
   ];
-  if (assignedUserIds.length > 0) {
+
+  if (uniqueAssignedUserIds.length > 0) {
     const recipients = await prisma.user.findMany({
-      where: { id: { in: assignedUserIds } },
+      where: { id: { in: uniqueAssignedUserIds } },
       select: { expoPushToken: true },
     });
 
@@ -475,6 +482,7 @@ const generateShift = async (
       { type: "SHIFT_REMINDER" },
     );
   }
+
   return {
     message: `${shiftsToCreate.length} shifts generated for ${department.name}`,
     month,
@@ -516,6 +524,18 @@ const getMyShifts = async (userId: string) => {
 
   return data;
 };
+const getMySwapRequests = async (userId: string) => {
+  return prisma.shiftSwapRequest.findMany({
+    where: { OR: [{ requesterId: userId }, { targetStaffId: userId }] },
+    include: {
+      requester: { select: { firstName: true, lastName: true } },
+      targetStaff: { select: { firstName: true, lastName: true } },
+      originalShift: { include: { shiftType: true } },
+      targetShift: { include: { shiftType: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+};
 const postSwapRequest = async (
   requesterId: string,
   targetStaffId: string,
@@ -545,7 +565,70 @@ const postSwapRequest = async (
     },
   });
 
+  const dept = await prisma.department.findUnique({
+    where: { id: originalShift.departmentId },
+    select: {
+      id: true,
+      users: { where: { role: "DEPT_HEAD" }, select: { expoPushToken: true } },
+    },
+  });
+  const requester = await prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { firstName: true, lastName: true },
+  });
+  for (const head of dept?.users || []) {
+    void sendPushNotification(
+      head.expoPushToken,
+      "Shift Swap Request",
+      `${requester?.firstName} ${requester?.lastName} requested a shift swap`,
+      { type: "SWAP_REQUEST" },
+    );
+  }
+
   return swapRequest;
+};
+const getDepartmentSwapRequests = async (departmentId: string) => {
+  return prisma.shiftSwapRequest.findMany({
+    where: {
+      OR: [
+        { originalShift: { departmentId } },
+        { targetShift: { departmentId } },
+      ],
+    },
+    include: {
+      requester: { select: { firstName: true, lastName: true } },
+      targetStaff: { select: { firstName: true, lastName: true } },
+      originalShift: { include: { shiftType: true } },
+      targetShift: { include: { shiftType: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+};
+
+const getColleagueShifts = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { departmentId: true },
+  });
+  if (!user?.departmentId) {
+    throw new AppError("No department assigned", 400);
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return prisma.shift.findMany({
+    where: {
+      departmentId: user.departmentId,
+      userId: { not: userId },
+      date: { gte: today },
+    },
+    include: {
+      user: { select: { id: true, firstName: true, lastName: true } },
+      shiftType: true,
+    },
+    orderBy: { date: "asc" },
+  });
 };
 
 const patchSwapRequest = async (id: string, status: SwapStatus) => {
@@ -577,6 +660,19 @@ const patchSwapRequest = async (id: string, status: SwapStatus) => {
     });
   }
 
+  const requesterInfo = await prisma.user.findUnique({
+    where: { id: swapRequest.requesterId },
+    select: { expoPushToken: true },
+  });
+  void sendPushNotification(
+    requesterInfo?.expoPushToken,
+    status === "APPROVED" ? "Swap Approved" : "Swap Rejected",
+    status === "APPROVED"
+      ? "Your shift swap request was approved."
+      : "Your shift swap request was rejected.",
+    { type: "SWAP_REVIEW" },
+  );
+
   return { message: `Swap request ${status.toLowerCase()}` };
 };
 
@@ -590,4 +686,7 @@ export {
   delShiftType,
   generateShift,
   patchSwapRequest,
+  getMySwapRequests,
+  getDepartmentSwapRequests,
+  getColleagueShifts,
 };

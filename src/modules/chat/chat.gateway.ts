@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
-import { saveMessage } from "./chat.service";
+import { markMessagesAsRead, saveMessage } from "./chat.service";
 
 interface SocketUser {
   id: string;
@@ -45,6 +45,19 @@ export const initializeChatGateway = (io: Server) => {
     socket.on("leave_conversation", (conversationId: string) => {
       socket.leave(conversationId);
       console.log(`User ${user.id} left conversation ${conversationId}`);
+    });
+
+    socket.on("mark_read", async (conversationId: string) => {
+      try {
+        await markMessagesAsRead(conversationId, user.id);
+        io.to(conversationId).emit("messages_read", {
+          conversationId,
+          userId: user.id,
+          readAt: new Date().toISOString(),
+        });
+      } catch (err: any) {
+        socket.emit("error", { message: err.message });
+      }
     });
 
     // event: send a message
