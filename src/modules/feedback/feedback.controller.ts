@@ -1,8 +1,8 @@
-// modules/feedback/feedback.controller.ts
+// modules/feedback/feedback.controller.ts — full file
 import { Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../../middlewares/auth.middleware";
 import { AppError } from "../../middlewares/error.middleware";
-import { createFeedback } from "./feedback.service";
+import { createFeedback, getAllFeedback } from "./feedback.service";
 
 const postFeedback = async (
   req: AuthenticatedRequest,
@@ -26,4 +26,17 @@ const postFeedback = async (
   }
 };
 
-export { postFeedback };
+const viewAllFeedback = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const data = await getAllFeedback();
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export { postFeedback, viewAllFeedback };

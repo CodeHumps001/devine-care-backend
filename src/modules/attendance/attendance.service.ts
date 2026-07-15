@@ -2,6 +2,7 @@ import { AttendanceStatus } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
 import { calculateDistance } from "../../utils/haversine";
+import { sendPushNotification } from "../../utils/pushNotifications";
 
 const clockIn = async (userId: string, latitude: number, longitude: number) => {
   // step 1 — get hospital GPS coordinates and geofence radius from settings
@@ -196,19 +197,28 @@ const getDepartmentAttendance = async (
 
   return records;
 };
+
 const updateAttendance = async (id: string, status: AttendanceStatus) => {
-  // step 1 — check if attendance record exists
-  const record = await prisma.attendanceRecord.findUnique({ where: { id } });
+  const record = await prisma.attendanceRecord.findUnique({
+    where: { id },
+    include: { user: { select: { expoPushToken: true, firstName: true } } },
+  });
 
   if (!record) {
     throw new AppError("Attendance record not found", 404);
   }
 
-  // step 2 — manually override the status
   const updated = await prisma.attendanceRecord.update({
     where: { id },
     data: { status },
   });
+
+  void sendPushNotification(
+    record.user.expoPushToken,
+    "Attendance Updated",
+    `Your attendance status was manually updated to ${status}`,
+    { type: "ATTENDANCE_UPDATE" },
+  );
 
   return updated;
 };

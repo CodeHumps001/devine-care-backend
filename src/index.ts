@@ -28,6 +28,7 @@ import { initializeChatGateway } from "./modules/chat/chat.gateway";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
 import { sendEmail } from "./config/mailer";
+import { startShiftReminderJob } from "./jobs/shiftReminder.job";
 
 dotenv.config();
 
@@ -91,6 +92,7 @@ const PORT = process.env.PORT || 5000;
 // use httpServer instead of app to listen
 httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  startShiftReminderJob();
   await scheduleAttendanceJobs();
 });
 

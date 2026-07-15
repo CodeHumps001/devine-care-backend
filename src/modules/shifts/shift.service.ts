@@ -9,6 +9,7 @@ import {
   getSlotMapForDepartment,
   SlotKey,
 } from "../../utils/shiftAlgorithm";
+import { sendBatchedPushNotifications } from "../../utils/pushNotifications";
 
 const postShiftType = async (
   name: string,
@@ -456,6 +457,24 @@ const generateShift = async (
     data: shiftsToCreate,
   });
 
+  const assignedUserIds = [
+    ...(staffGroups?.morning || []),
+    ...(staffGroups?.night || []),
+    ...(staffGroups?.rotating || []),
+  ];
+  if (assignedUserIds.length > 0) {
+    const recipients = await prisma.user.findMany({
+      where: { id: { in: assignedUserIds } },
+      select: { expoPushToken: true },
+    });
+
+    void sendBatchedPushNotifications(
+      recipients,
+      "New Shift Schedule",
+      `Your schedule for ${month}/${year} is ready. Tap to view.`,
+      { type: "SHIFT_REMINDER" },
+    );
+  }
   return {
     message: `${shiftsToCreate.length} shifts generated for ${department.name}`,
     month,
