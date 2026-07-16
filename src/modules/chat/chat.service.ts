@@ -279,6 +279,8 @@ const markMessagesAsRead = async (conversationId: string, userId: string) => {
 
   if (unread.length === 0) return { marked: 0 };
 
+  // FIX: model is MessageReadReceipt in schema.prisma → client accessor
+  // is prisma.messageReadReceipt, not prisma.readReceipt
   await prisma.messageReadReceipt.createMany({
     data: unread.map((m) => ({ messageId: m.id, userId })),
     skipDuplicates: true,

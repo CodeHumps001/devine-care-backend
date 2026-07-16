@@ -40,6 +40,7 @@ app.use(
     origin: [
       "http://localhost:3000",
       "https://divinenetcarehospital.vercel.app",
+      "http://localhost:8081",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

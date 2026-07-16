@@ -1,3 +1,4 @@
+// modules/attendance/attendance.service.ts
 import { AttendanceStatus } from "@prisma/client";
 import prisma from "../../config/prisma";
 import { AppError } from "../../middlewares/error.middleware";
@@ -5,20 +6,14 @@ import { calculateDistance } from "../../utils/haversine";
 import { sendPushNotification } from "../../utils/pushNotifications";
 
 const clockIn = async (userId: string, latitude: number, longitude: number) => {
-  // step 1 — get hospital GPS coordinates and geofence radius from settings
   const hpSettings = await prisma.hospitalSettings.findFirst({
-    select: {
-      latitude: true,
-      longitude: true,
-      geofenceRadius: true,
-    },
+    select: { latitude: true, longitude: true, geofenceRadius: true },
   });
 
   if (!hpSettings) {
     throw new AppError("Hospital settings not configured", 404);
   }
 
-  // step 2 — calculate distance between staff current location and hospital
   const distance = calculateDistance(
     latitude,
     longitude,
@@ -26,37 +21,24 @@ const clockIn = async (userId: string, latitude: number, longitude: number) => {
     hpSettings.longitude,
   );
 
-  // step 3 — if staff is outside the geofence radius, block clock-in
   if (distance > hpSettings.geofenceRadius) {
     throw new AppError("You are not within hospital premises", 401);
   }
 
-  // step 4 — get today's date range (midnight to midnight)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // step 5 — find the shift scheduled for this user today
   const shift = await prisma.shift.findFirst({
-    where: {
-      userId,
-      date: {
-        gte: today,
-        lt: tomorrow,
-      },
-    },
-    include: {
-      shiftType: true,
-    },
+    where: { userId, date: { gte: today, lt: tomorrow } },
+    include: { shiftType: true },
   });
 
   if (!shift) {
     throw new AppError("No shift scheduled for today", 404);
   }
 
-  // step 6 — check if staff already clocked in for this shift
   const existingRecord = await prisma.attendanceRecord.findUnique({
     where: { shiftId: shift.id },
   });
@@ -65,19 +47,15 @@ const clockIn = async (userId: string, latitude: number, longitude: number) => {
     throw new AppError("Already clocked in", 400);
   }
 
-  // step 7 — compare current time to shift start time to determine status
   const now = new Date();
   const [shiftHour, shiftMinute] = shift.shiftType.startTime
     .split(":")
     .map(Number);
-
   const shiftStart = new Date();
   shiftStart.setHours(shiftHour, shiftMinute, 0, 0);
 
-  // if current time is after shift start → LATE, otherwise → PRESENT
   const status = now <= shiftStart ? "PRESENT" : "LATE";
 
-  // step 8 — create the attendance record with location and status
   const attendance = await prisma.attendanceRecord.create({
     data: {
       userId,
@@ -89,53 +67,69 @@ const clockIn = async (userId: string, latitude: number, longitude: number) => {
     },
   });
 
+  // ── Quiet self-confirmation ──
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, expoPushToken: true, departmentId: true },
+  });
+
+  void sendPushNotification(
+    user?.expoPushToken,
+    "Clocked In",
+    status === "LATE"
+      ? `You clocked in late for your ${shift.shiftType.name} shift.`
+      : `You clocked in for your ${shift.shiftType.name} shift.`,
+    { type: "ATTENDANCE_UPDATE" },
+  );
+
+  // ── Alert the department head only when the clock-in is LATE ──
+  if (status === "LATE" && user?.departmentId) {
+    const deptHeads = await prisma.user.findMany({
+      where: { departmentId: user.departmentId, role: "DEPT_HEAD" },
+      select: { expoPushToken: true },
+    });
+    for (const head of deptHeads) {
+      void sendPushNotification(
+        head.expoPushToken,
+        "Staff Clocked In Late",
+        `${user.firstName} clocked in late for their ${shift.shiftType.name} shift.`,
+        { type: "ATTENDANCE_LATE" },
+      );
+    }
+  }
+
   return attendance;
 };
 
 const clockOut = async (userId: string) => {
-  // step 1 — get today's date range
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // step 2 — find today's shift for this user
   const shift = await prisma.shift.findFirst({
-    where: {
-      userId,
-      date: {
-        gte: today,
-        lt: tomorrow,
-      },
-    },
+    where: { userId, date: { gte: today, lt: tomorrow } },
   });
 
   if (!shift) {
     throw new AppError("No shift found for today", 404);
   }
 
-  // step 3 — find the attendance record for this shift
   const attendanceRecord = await prisma.attendanceRecord.findUnique({
     where: { shiftId: shift.id },
   });
 
-  // step 4 — if no record exists, staff never clocked in
   if (!attendanceRecord) {
     throw new AppError("You have not clocked in yet", 400);
   }
 
-  // step 5 — if already clocked out, block duplicate clock-out
   if (attendanceRecord.clockOut) {
     throw new AppError("Already clocked out", 400);
   }
 
-  // step 6 — update the record with clock-out time
   const updated = await prisma.attendanceRecord.update({
     where: { id: attendanceRecord.id },
-    data: {
-      clockOut: new Date(),
-    },
+    data: { clockOut: new Date() },
   });
 
   return updated;
@@ -144,17 +138,11 @@ const clockOut = async (userId: string) => {
 const getMyAttendance = async (userId: string) => {
   const records = await prisma.attendanceRecord.findMany({
     where: { userId },
-    include: {
-      shift: {
-        include: {
-          shiftType: true,
-        },
-      },
-    },
+    include: { shift: { include: { shiftType: true } } },
   });
-
   return records;
 };
+
 const getDepartmentAttendance = async (
   departmentId: string,
   dateString?: string,
@@ -164,34 +152,16 @@ const getDepartmentAttendance = async (
   if (dateString) {
     const targetDate = new Date(dateString);
     targetDate.setHours(0, 0, 0, 0);
-
     const nextDay = new Date(targetDate);
     nextDay.setDate(nextDay.getDate() + 1);
-
-    clockInFilter = {
-      clockIn: {
-        gte: targetDate,
-        lt: nextDay,
-      },
-    };
+    clockInFilter = { clockIn: { gte: targetDate, lt: nextDay } };
   }
 
   const records = await prisma.attendanceRecord.findMany({
-    where: {
-      shift: {
-        departmentId,
-      },
-      ...clockInFilter, // Dynamically spreads the clock-in filter if it exists
-    },
+    where: { shift: { departmentId }, ...clockInFilter },
     include: {
-      user: {
-        select: { firstName: true, lastName: true },
-      },
-      shift: {
-        include: {
-          shiftType: true,
-        },
-      },
+      user: { select: { firstName: true, lastName: true } },
+      shift: { include: { shiftType: true } },
     },
   });
 
